@@ -1,0 +1,121 @@
+:host {
+  --bg:      #272822;
+  --bg-sub:  #1e1f1b;
+  --bg-raise: #3f4039;
+  --border:  #3e3d32;
+  --fg:      #f8f8f2;
+  --fg-dim:  #75715e;
+  --accent:  #a6e22e;
+  --radius:  4px;
+  --gap:     8px;
+
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-raise);
+  color: var(--fg);
+  font-family: monospace;
+}
+
+#container {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  gap: var(--gap);
+  box-sizing: border-box;
+}
+
+#controls {
+  display: flex;
+  gap: var(--gap);
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--fg-dim);
+  padding: 4px 12px 12px 4px;
+}
+
+.password-field-group {
+  border-bottom-left-radius: 8px;
+}
+.id-field-group {
+  border-bottom-right-radius: 8px;
+}
+
+#controls .field-group:last-child {
+  margin-left: auto;
+}
+
+label {
+  color: var(--accent);
+  text-align: center;
+}
+
+input {
+  background: var(--bg-sub);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-family: inherit;
+  width: 24ch;
+  box-sizing: border-box;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#password-wrap {
+  display: flex;
+  gap: 4px;
+}
+
+#password-wrap input {
+  flex: 1;
+  width: auto;
+}
+
+#password-toggle {
+  background: var(--bg-sub);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+#password-toggle:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+#text-wrap {
+  padding: 12px;
+  min-height: 0;
+}
+
+#text-field {
+  border-radius: 4px;
+  font-size: 1.2em;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid transparent;
+  padding: 8px;
+  font-family: inherit;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  resize: none;
+}
+
+#text-field:focus {
+  outline: none;
+  border-color: var(--accent);
+}

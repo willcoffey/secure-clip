@@ -1,0 +1,18 @@
+name = "secure-clip"
+main = "index.ts"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "../dist"
+
+[[durable_objects.bindings]]
+name = "CLIP_ROOM"
+class_name = "PlatformConnector"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClipRoom"]
+
+[[migrations]]
+tag = "v2"
+renamed_classes = [{ from = "ClipRoom", to = "PlatformConnector" }]
