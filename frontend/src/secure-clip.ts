@@ -32,6 +32,23 @@ export class SecureClip {
     this.ws.onclose = () => console.log("WS closed");
   }
 
+  stdin(message: Message) {
+    console.log(message.action)
+    switch (message.action) {
+      case "set-id":
+        this.state.id = message.args;
+        this.load();
+        return;
+      case "set-password":
+        this.state.password = message.args;
+        return;
+      case "update":
+        this.state.plaintext = message.args;
+        this.update();
+        return;
+    }
+  }
+
   private send(command: string, body?: object) {
     if (this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(JSON.stringify({ command, body }));
@@ -61,27 +78,11 @@ export class SecureClip {
     return ciphertext.toLowerCase();
   }
 
-  async push(): Promise<void> {
+  async update(): Promise<void> {
     if (typeof this.state.plaintext !== "string") return;
     const ciphertext = await this.encrypt(this.state.plaintext);
     this.state.ciphertext = ciphertext;
     this.send("update", { id: this.state.id, ciphertext });
-  }
-
-  stdin(message: Message) {
-    switch (message.action) {
-      case "set-id":
-        this.state.id = message.args;
-        this.load();
-        return;
-      case "set-password":
-        this.state.password = message.args;
-        return;
-      case "update":
-        this.state.plaintext = message.args;
-        this.push();
-        return;
-    }
   }
 }
 
@@ -125,18 +126,35 @@ class SecureClipElement extends HTMLElement {
     });
 
     let debounce: ReturnType<typeof setTimeout>;
+    let dirty = false;
+
+    const flush = () => {
+      if (!dirty) return;
+      clearTimeout(debounce);
+      dirty = false;
+      this.core.stdin({ action: "update", args: textarea.value });
+    };
+
     textarea.addEventListener("input", (e) => {
+      dirty = true;
       const target = e.target as HTMLTextAreaElement;
       clearTimeout(debounce);
       debounce = setTimeout(() => {
+        dirty = false;
         this.core.stdin({ action: "update", args: target.value });
       }, 1000);
     });
     textarea.addEventListener("blur", (e) => {
       clearTimeout(debounce);
+      dirty = false;
       const target = e.target as HTMLTextAreaElement;
       this.core.stdin({ action: "update", args: target.value });
     });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+    window.addEventListener("beforeunload", flush);
   }
 }
 
