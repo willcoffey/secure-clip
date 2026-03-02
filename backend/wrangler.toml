@@ -18,3 +18,11 @@ new_sqlite_classes = ["ClipRoom"]
 [[migrations]]
 tag = "v2"
 renamed_classes = [{ from = "ClipRoom", to = "PlatformConnector" }]
+
+[[migrations]]
+tag = "v3"
+deleted_classes = ["PlatformConnector"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["PlatformConnector"]
