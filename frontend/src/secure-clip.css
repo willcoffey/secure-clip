@@ -15,6 +15,7 @@
   background: var(--bg-raise);
   color: var(--fg);
   font-family: monospace;
+  font-size: 16px;
 }
 
 #container {
@@ -61,6 +62,7 @@ input {
   border-radius: var(--radius);
   padding: 4px 8px;
   font-family: inherit;
+  font-size: inherit;
   width: 24ch;
   box-sizing: border-box;
 }
