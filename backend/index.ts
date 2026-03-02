@@ -3,6 +3,7 @@ import { Service, Handler } from "./Service";
 
 interface Env {
   CLIP_ROOM: DurableObjectNamespace;
+  ASSETS: Fetcher;
 }
 
 interface Command {
@@ -98,6 +99,6 @@ export default {
       const stub = env.CLIP_ROOM.get(env.CLIP_ROOM.idFromName("global"));
       return stub.fetch(request);
     }
-    return new Response("Not found", { status: 404 });
+    return env.ASSETS.fetch(request);
   },
 };

@@ -4,7 +4,8 @@ compatibility_date = "2025-01-01"
 
 [assets]
 directory = "../dist"
-run_worker_first = ["/api/*"]
+binding = "ASSETS"
+run_worker_first = true
 
 [[durable_objects.bindings]]
 name = "CLIP_ROOM"
