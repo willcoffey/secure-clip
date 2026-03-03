@@ -11,5 +11,9 @@
     "typescript": "^5.8.3",
     "vite": "^7.3.1",
     "wrangler": "^4.69.0"
+  },
+  "dependencies": {
+    "lucide-static": "^0.576.0",
+    "qr": "^0.5.4"
   }
 }

@@ -1,17 +1,10 @@
-# Implementation Steps
+# Standard popover for qr-code
 
-## Frontend
+when the qr-code button is pressed, a popover display element should be displayed
 
-- Default id/password to `swordfish` on load
-- On connect, send `{ endpoint: "load", body: { id } }` to fetch
-  existing ciphertext, then decrypt and populate textarea
-- Change WS message shape to `{ endpoint: string, body?: object }`
+it should occupy most of the screen
+It should dim the rest of the screen
+it should be dismissed when anything is clicked or key is pressed
 
-## Backend
-
-- Parse incoming WS messages as `{ endpoint: string, body?: object }`
-- Route `endpoint` to handlers: `"load"` | `"update"` | `"subscribe"`
-  - `load`: fetch ciphertext by id, send back to caller only
-  - `update`: store ciphertext, broadcast to all subscribers
-  - `subscribe`: register client to receive updates for an id
-- Keep routing logic separate from the HTTP upgrade handler
+I have installed the npm qr library. use it to encode the password as a qr code
+and display it as an svg in the popover

@@ -14,15 +14,23 @@ interface Command {
 async function route(
   cmd: Command,
   service: Service,
+  ctx: { wsConnections: number; idHandlers: number } = { wsConnections: 0, idHandlers: 0 },
 ): Promise<{ data?: object; error?: string } | null> {
   switch (cmd.command) {
     case "load": {
-      const ciphertext = await service.load({ id: cmd.body.id });
-      return { data: { command: "load", body: { id: cmd.body.id, ciphertext } } };
+      if (cmd.body.id === "system-stats") {
+        const stats = service.systemStats(ctx);
+        const ciphertext = { salt: "", sign: "", ciphertext: stats };
+        return { data: { command: "set-ciphertext", body: { id: cmd.body.id, ciphertext } } };
+      }
+      const raw = await service.load({ id: cmd.body.id });
+      const ciphertext = raw ? JSON.parse(raw) : null;
+      return { data: { command: "set-ciphertext", body: { id: cmd.body.id, ciphertext } } };
     }
     case "update": {
+      if (cmd.body.id === "system-stats") return {};
       try {
-        await service.update({ id: cmd.body.id, ciphertext: cmd.body.ciphertext });
+        await service.update({ id: cmd.body.id, ciphertext: JSON.stringify(cmd.body.ciphertext) });
         return {};
       } catch (e: any) {
         return { error: e.message };
@@ -69,7 +77,7 @@ export class PlatformConnector extends DurableObject {
     if (!cmd) return;
     if (cmd.command === "subscribe") {
       const handler: Handler = ({ id, ciphertext }) => {
-        ws.send(JSON.stringify({ command: "update", body: { id, ciphertext } }));
+        ws.send(JSON.stringify({ command: "set-ciphertext", body: { id, ciphertext: JSON.parse(ciphertext) } }));
       };
       const entries = this.wsHandlers.get(ws) ?? [];
       entries.push({ id: cmd.body.id, handler });
@@ -77,7 +85,20 @@ export class PlatformConnector extends DurableObject {
       this.service.subscribe({ id: cmd.body.id, handler });
       return;
     }
-    const result = await route(cmd, this.service);
+    if (cmd.command === "unsubscribe") {
+      const entries = this.wsHandlers.get(ws) ?? [];
+      const idx = entries.findIndex((e) => e.id === cmd.body.id);
+      if (idx !== -1) {
+        this.service.unsubscribe({ id: cmd.body.id, handler: entries[idx].handler });
+        entries.splice(idx, 1);
+      }
+      return;
+    }
+    const ctx = {
+      wsConnections: this.wsHandlers.size,
+      idHandlers: [...this.wsHandlers.values()].reduce((n, arr) => n + arr.length, 0),
+    };
+    const result = await route(cmd, this.service, ctx);
     if (!result) return;
     if (result.data) ws.send(JSON.stringify(result.data));
     else if (result.error) ws.send(JSON.stringify({ error: result.error }));
