@@ -1,9 +1,7 @@
 <div id="container">
   <div id="controls">
-    <div class="field-group passphrase-field-group">
-      <label for="passphrase-field">passphrase</label>
-      <div id="passphrase-wrap">
-        <input id="passphrase-field" type="password" autocomplete="current-password" />
+    <div id="passphrase-wrap">
+        <input id="passphrase-field" type="password" autocomplete="current-password" aria-label="Passphrase" />
         <button
           id="passphrase-toggle"
           type="button"
@@ -15,7 +13,6 @@
         <button id="passphrase-qr" type="button" aria-label="Scan QR code"></button>
         <button id="passphrase-help" type="button" aria-label="Help"></button>
       </div>
-    </div>
   </div>
   <div id="text-wrap">
     <textarea spellcheck="false" id="text-field" aria-label="Clipboard text"></textarea>

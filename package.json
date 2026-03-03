@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "lucide-static": "^0.576.0",
-    "qr": "^0.5.4",
-    "utilities": "file:../utilities"
+    "qr": "^0.5.4"
   }
 }

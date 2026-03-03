@@ -23,12 +23,7 @@ Websockets quitely get removed from subscribers on backend after a few seconds. 
 not disconnect but does not get subscribed messages. Cloudflare has websocket hibernation, related?
 I also saw a demo chat app cloudlfare created for durable objects. worth reviewing.
 
-## Redo command line utility.
-Use castle as a base. Add the Util dependency. Extract SecureClient.ts to be its own file and bot
-deno and web compatible. use it in the command line utility.
-
 ## Special behaviour for certain id's
-
 - system-stats : Fetches stats from server
 - system-help : Displays help documentation in text area
 - a terry pratchet reference : The password is swordfish

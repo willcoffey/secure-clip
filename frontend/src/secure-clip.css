@@ -40,25 +40,9 @@
 #controls {
   display: flex;
   width: 100%;
-  box-sizing: border-box;
-  background: var(--fg-dim);
-}
-
-/* Field groups */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
   min-width: 0;
-  width: 100%;
-}
-
-label {
-  color: var(--accent);
-  text-align: center;
-  font-size: 1.3em;
+  box-sizing: border-box;
+  justify-content: center;
 }
 
 /* Shared input/textarea base */
@@ -84,6 +68,10 @@ input {
 }
 
 #passphrase-wrap {
+  background: var(--fg-dim);
+  padding: 8px;
+  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: 8px;
   display: flex;
   gap: 4px;
   min-width: 0;

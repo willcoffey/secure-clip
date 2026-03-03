@@ -1,72 +1,51 @@
-# Build a deno terminal utility
+# Websocket issue
 
-1. The deno utility should use the same api as the web utility
- - move Crypt and SecureClip to their own file that is deno
-   compatible.
+Currently, I think the socket hibernates after a bit of time, and I think that may mess up the pub
+sub system.
 
-2. Build the utility
-look to 
-~/repos/castle/src/tools/decrypt.ts
-~/repos/castle/src/tools/encrypt.ts
+specifically, if a page has been open but unused, the socket doesn't disconnect. it doesn't receive
+updates to boards. if you type in it, it will set boards.
 
-for inspiration.
+review
+https://github.com/cloudflare/workers-chat-demo
+and
+https://developers.cloudflare.com/workers/tutorials/deploy-a-realtime-chat-app/
 
-Deno utility should use post requests, and should use it's own version of Crypto
-that is shared with html element.
+as far as methods, and apply it to PlatformConnector
+refactor the class with comments, to be readable, and to hibernate sockets
 
-it should get password from env, unless specified with --password
+## Questions
 
-format should be
-
-echo foo | seclip set -d secure-clip.wilcof.workers.dev
-
-or 
-
-seclip -d ... --passphrase "thisandl afjaslkj aslkdj" get
-
----
-
-SecureClip should have a constructor option for connection type. Websocket or
-post. and the "send" function should decide which to use.
+**Q1: Subscription persistence strategy**
+When the DO hibernates, `wsHandlers` and `service.handlers` are cleared.
+On wake, the WebSocket is still open (client sees no disconnect).
+Two options:
+- Server: persist subscribed id(s) via `ws.serializeAttachment()` and
+  re-register handlers in `webSocketMessage` before processing each msg.
+- Client: detect stale state and re-send a `subscribe` command (but how
+  does the client know subscriptions were lost without a disconnect?).
+Which approach, or both?
 
 ---
 
-## Notes
+Persist the subscribed ids
 
-**POST API is already supported by the backend.** `load` and `update`
-both work over POST to `/api/ws` (same route). `subscribe`/`unsubscribe`
-are WebSocket-only — the CLI only needs `load` (get) and `update` (set),
-so POST is sufficient.
+**Q2: Stale-connection detection on the client**
+Since Cloudflare keeps the TCP connection alive through hibernation, the
+client's `onclose` never fires when the DO loses subscription state.
+Should the client send periodic pings and treat a timeout as a signal to
+re-subscribe? Or is server-side `serializeAttachment` sufficient on its
+own?
 
-**Things to strip from `SecureClip` for the shared file:**
-- `location.host` — needs to be a constructor param (e.g. `-d` flag)
-- `localStorage` — CLI reads passphrase from env / flag, no persistence
-- `document.visibilitychange` listener — browser-only, not needed in CLI
-- `render` callback — not needed, CLI just prints to stdout
+---
 
-**`deriveId` is slow by design** (650k PBKDF2 iterations). The CLI will
-pause visibly before every get/set. Consider if that's acceptable UX or
-if the CLI should warn the user.
+No, we want hibernation when it makes sense. An idle client it makes sense.
 
-** add command line options for 1. setting the id, and 2. printing the id **
+**Q3: Double-close in `webSocketClose`**
+`webSocketClose` currently calls `ws.close()`. Cloudflare docs suggest
+the WebSocket is already closed when this handler fires — does this
+cause an error, or is it a no-op? Should it be removed?
 
-**ENV var name not specified.** What should it be? `SECLIP_PASSPHRASE`?
+---
 
-** sounds good **
-
-**`get` output format**: server returns
-`{ command: "set-ciphertext", body: { id, ciphertext } }`. The CLI
-needs to decrypt `ciphertext` and write plaintext to stdout. Should
-invalid HMAC be a non-zero exit code?
-
-** yeah, exit early **
-
-**`set` reads from stdin** — confirm trailing newline should be stripped
-before encrypting (echo adds one).
-
-wait for stdin to complete and use all of it
-
-cat foo.txt | seclip set
-seclip get > foo2.txt
-
-should result in idientical files
+keep it but add an @TODO comment on it
