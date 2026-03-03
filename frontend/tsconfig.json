@@ -5,6 +5,8 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
+    "lib": ["ESNext", "DOM"],
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"]
   },
   "include": ["src"],

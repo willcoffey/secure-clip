@@ -123,3 +123,5 @@ class SecureClipElement extends HTMLElement {
 const sheet = new CSSStyleSheet();
 sheet.replaceSync(css);
 customElements.define("secure-clip", SecureClipElement);
+
+navigator.serviceWorker?.register("/sw.js");

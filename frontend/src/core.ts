@@ -1,3 +1,5 @@
+import { RESERVED_KEYS } from "./reserved-keys.ts";
+
 export type Message =
   | { action: "set-passphrase"; args: string }
   | { action: "set-plaintext"; args: string }
@@ -11,7 +13,7 @@ export interface EncryptedData {
 
 export interface WsMessage {
   command: string;
-  body: { id: string; ciphertext: EncryptedData | null };
+  body: { id: string; ciphertext: EncryptedData | null; plaintext?: string };
 }
 
 export interface State {
@@ -40,6 +42,8 @@ export interface SecureClipOptions {
 }
 
 export class SecureClip {
+  static RESERVED_KEYS = RESERVED_KEYS;
+
   state: State;
   render?: (plaintext: string) => void;
   private connection: Connection;
@@ -63,7 +67,7 @@ export class SecureClip {
   }
 
   private async init() {
-    this.state.id = await Crypt.deriveId(this.state.passphrase);
+    this.state.id = await this.resolveId(this.state.passphrase);
     await this.send("load", { id: this.state.id });
     if (this.connection.type === "websocket") {
       this.send("subscribe", { id: this.state.id });
@@ -123,7 +127,7 @@ export class SecureClip {
       case "set-passphrase": {
         const oldId = this.state.id;
         this.state.passphrase = message.args;
-        this.state.id = await Crypt.deriveId(message.args);
+        this.state.id = await this.resolveId(message.args);
         if (this.connection.type === "websocket") {
           this.send("unsubscribe", { id: oldId });
           this.send("subscribe", { id: this.state.id });
@@ -160,10 +164,12 @@ export class SecureClip {
     if (matched) this.render?.(this.state.plaintext);
   }
 
+  private resolveId(passphrase: string): Promise<string> | string {
+    if (SecureClip.RESERVED_KEYS.includes(passphrase)) return passphrase;
+    return Crypt.deriveId(passphrase);
+  }
+
   private async getDecrypted(data: EncryptedData): Promise<{ valid: boolean; plaintext: string }> {
-    if (this.state.passphrase.startsWith("system-")) {
-      return { valid: true, plaintext: data.ciphertext };
-    }
     return Crypt.decrypt(data, this.state.passphrase);
   }
 
@@ -180,7 +186,7 @@ export class SecureClip {
         body: JSON.stringify({ command, body, meta: { date: Date.now() } }),
       });
       if (response.ok && response.status !== 204) {
-        const msg = await response.json();
+        const msg = await response.json() as WsMessage;
         if (msg?.command) this.handleMessage(msg);
       }
     }
@@ -189,6 +195,13 @@ export class SecureClip {
   private handleMessage(msg: WsMessage) {
     if (msg.body?.id !== this.state.id) {
       throw new Error(`id mismatch: ${msg.body.id} !== ${this.state.id}`);
+    }
+    if (msg.command === "set-plaintext") {
+      this.state.plaintext = msg.body.plaintext ?? "";
+      this.state.encrypted = false;
+      this.state.status = "";
+      this.render?.(this.state.plaintext);
+      return;
     }
     const raw = msg.body.ciphertext;
     const ciphertext: EncryptedData = {
@@ -206,8 +219,6 @@ export class Crypt {
    * with a fixed salt. Slow by design — makes passphrase brute-forcing harder.
    */
   static async deriveId(passphrase: string): Promise<string> {
-    // System channels use their name directly as the id
-    if (passphrase.startsWith("system-")) return passphrase;
     if (!crypto?.subtle?.importKey) throw "Subtle crypto not available";
     if (!crypto?.subtle?.deriveKey) throw "Subtle crypto not available";
 
@@ -314,7 +325,7 @@ export class Crypt {
 
     const hmac = await crypto.subtle.importKey(
       "raw",
-      await crypto.subtle.exportKey("raw", key),
+      await crypto.subtle.exportKey("raw", key) as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       true,
       ["sign", "verify"],
@@ -398,6 +409,6 @@ export function hoistPromise<T = any>(): { res: Function; rej: Function; done: P
 export function sleep(ms: number) {
   if (ms <= 0) return;
   const { res, done } = hoistPromise();
-  setTimeout(res, ms);
+  setTimeout(res as () => void, ms);
   return done;
 }

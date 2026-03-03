@@ -1,5 +1,18 @@
 import { DurableObject } from "cloudflare:workers";
 import { Service, Handler } from "./Service";
+import { RESERVED_KEYS } from "../frontend/src/reserved-keys.ts";
+
+const RESERVED = new Set(RESERVED_KEYS);
+
+const HELP_TEXT = `secure-clip: encrypted shared clipboard
+
+  type a passphrase to open a board
+  boards are end-to-end encrypted with AES-CTR + HMAC
+  the server stores only ciphertext and never sees your passphrase
+
+special boards:
+  system-stats  server storage statistics
+  system-help   this message`;
 
 interface Env {
   CLIP_ROOM: DurableObjectNamespace;
@@ -18,17 +31,18 @@ async function route(
 ): Promise<{ data?: object; error?: string } | null> {
   switch (cmd.command) {
     case "load": {
-      if (cmd.body.id === "system-stats") {
-        const stats = service.systemStats(ctx);
-        const ciphertext = { salt: "", sign: "", ciphertext: stats };
-        return { data: { command: "set-ciphertext", body: { id: cmd.body.id, ciphertext } } };
+      if (RESERVED.has(cmd.body.id)) {
+        let plaintext = "";
+        if (cmd.body.id === "system-stats") plaintext = service.systemStats(ctx);
+        if (cmd.body.id === "system-help") plaintext = HELP_TEXT;
+        return { data: { command: "set-plaintext", body: { id: cmd.body.id, plaintext } } };
       }
       const raw = await service.load({ id: cmd.body.id });
       const ciphertext = raw ? JSON.parse(raw) : null;
       return { data: { command: "set-ciphertext", body: { id: cmd.body.id, ciphertext } } };
     }
     case "update": {
-      if (cmd.body.id === "system-stats") return {};
+      if (RESERVED.has(cmd.body.id)) return {};
       try {
         await service.update({ id: cmd.body.id, ciphertext: JSON.stringify(cmd.body.ciphertext) });
         return {};
@@ -40,8 +54,20 @@ async function route(
   return null;
 }
 
+/**
+ * Cloudflare Durable Object that handles all WebSocket connections and
+ * routes commands to the Service layer.
+ *
+ * WebSocket Hibernation: Cloudflare can hibernate this DO when all WebSockets
+ * are idle, clearing all in-memory state. On wake, `webSocketMessage` is
+ * called on a fresh instance. To survive this, each WebSocket's subscribed
+ * ids are persisted via `ws.serializeAttachment()` and re-registered at the
+ * top of every `webSocketMessage` call.
+ */
 export class PlatformConnector extends DurableObject {
   service: Service;
+  // In-memory map of active handler closures per WebSocket.
+  // This is rebuilt from ws.deserializeAttachment() after hibernation.
   private wsHandlers = new Map<WebSocket, Array<{ id: string; handler: Handler }>>();
 
   constructor(ctx: DurableObjectState, env: never) {
@@ -65,6 +91,9 @@ export class PlatformConnector extends DurableObject {
     }
     const cmd = this.validate(await request.json().catch(() => null));
     if (!cmd) return new Response("Bad Request", { status: 400 });
+    // Restore subscriptions before routing — 'update' triggers notification
+    // handlers, and the DO may have woken from hibernation for this request.
+    this.restoreAllSubscriptions();
     const result = await route(cmd, this.service);
     if (!result) return new Response("Unknown command", { status: 400 });
     if (result.error) return Response.json({ error: result.error }, { status: 400 });
@@ -72,9 +101,44 @@ export class PlatformConnector extends DurableObject {
     return new Response(null, { status: 204 });
   }
 
+  /**
+   * After hibernation, `wsHandlers` is empty on the new DO instance.
+   * This re-registers handler closures from the ids persisted on the WebSocket.
+   * Skipped if this WebSocket is already registered (same DO instance lifetime).
+   */
+  private restoreSubscriptions(ws: WebSocket) {
+    if (this.wsHandlers.has(ws)) return;
+    const ids: string[] = ws.deserializeAttachment() ?? [];
+    if (ids.length === 0) return;
+    const entries: Array<{ id: string; handler: Handler }> = [];
+    for (const id of ids) {
+      const handler: Handler = ({ id, ciphertext }) => {
+        ws.send(JSON.stringify({ command: "set-ciphertext", body: { id, ciphertext: JSON.parse(ciphertext) } }));
+      };
+      entries.push({ id, handler });
+      this.service.subscribe({ id, handler });
+    }
+    this.wsHandlers.set(ws, entries);
+  }
+
+  /**
+   * Restores subscriptions for all open WebSockets. Must be called before any
+   * operation that triggers notification handlers (e.g. service.update),
+   * since both HTTP and WebSocket requests can wake a hibernated DO.
+   */
+  private restoreAllSubscriptions() {
+    for (const ws of this.ctx.getWebSockets()) {
+      this.restoreSubscriptions(ws);
+    }
+  }
+
   async webSocketMessage(ws: WebSocket, message: string) {
+    // Restore subscriptions if this is a fresh DO instance (post-hibernation).
+    this.restoreAllSubscriptions();
+
     const cmd = this.validate(JSON.parse(message));
     if (!cmd) return;
+
     if (cmd.command === "subscribe") {
       const handler: Handler = ({ id, ciphertext }) => {
         ws.send(JSON.stringify({ command: "set-ciphertext", body: { id, ciphertext: JSON.parse(ciphertext) } }));
@@ -83,17 +147,23 @@ export class PlatformConnector extends DurableObject {
       entries.push({ id: cmd.body.id, handler });
       this.wsHandlers.set(ws, entries);
       this.service.subscribe({ id: cmd.body.id, handler });
+      // Persist the updated id list so it survives hibernation.
+      ws.serializeAttachment(entries.map((e) => e.id));
       return;
     }
+
     if (cmd.command === "unsubscribe") {
       const entries = this.wsHandlers.get(ws) ?? [];
       const idx = entries.findIndex((e) => e.id === cmd.body.id);
       if (idx !== -1) {
         this.service.unsubscribe({ id: cmd.body.id, handler: entries[idx].handler });
         entries.splice(idx, 1);
+        // Keep persisted ids in sync.
+        ws.serializeAttachment(entries.map((e) => e.id));
       }
       return;
     }
+
     const ctx = {
       wsConnections: this.wsHandlers.size,
       idHandlers: [...this.wsHandlers.values()].reduce((n, arr) => n + arr.length, 0),
@@ -109,6 +179,8 @@ export class PlatformConnector extends DurableObject {
       this.service.unsubscribe({ id, handler });
     }
     this.wsHandlers.delete(ws);
+    // @TODO: The WebSocket may already be closed when this fires — verify
+    // whether this call is a no-op or throws in that case.
     ws.close();
   }
 }
@@ -119,6 +191,9 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       const stub = env.CLIP_ROOM.get(env.CLIP_ROOM.idFromName("global"));
       return stub.fetch(request);
+    }
+    if (url.pathname === "/favicon.ico") {
+      return Response.redirect(new URL("/icon-48x48.png", request.url).href, 301);
     }
     return env.ASSETS.fetch(request);
   },
