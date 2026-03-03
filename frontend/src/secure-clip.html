@@ -1,26 +1,26 @@
 <div id="container">
   <div id="controls">
-    <div class="field-group id-field-group">
-      <label for="id-field">id</label>
-      <div id="id-wrap">
-        <input id="id-field" type="text" autocomplete="off" />
-        <button id="id-qr" type="button" aria-label="Scan QR code"></button>
+    <div class="field-group passphrase-field-group">
+      <label for="passphrase-field">passphrase</label>
+      <div id="passphrase-wrap">
+        <input id="passphrase-field" type="password" autocomplete="current-password" />
+        <button
+          id="passphrase-toggle"
+          type="button"
+          aria-label="Show passphrase"
+          aria-pressed="false"
+        >
+        </button>
+        <button id="passphrase-dice" type="button" aria-label="Randomize passphrase"></button>
+        <button id="passphrase-qr" type="button" aria-label="Scan QR code"></button>
+        <button id="passphrase-help" type="button" aria-label="Help"></button>
       </div>
     </div>
-    <div class="field-group password-field-group">
-      <label for="password-field">password</label>
-      <div id="password-wrap">
-        <input id="password-field" type="password" autocomplete="current-password" />
-        <button id="password-toggle" type="button" aria-label="Show password" aria-pressed="false"></button>
-        <button id="password-qr" type="button" aria-label="Scan QR code"></button>
-      </div>
-    </div>
-  </div>
-  <div id="qr-backdrop" hidden>
-    <div id="qr-popover"></div>
   </div>
   <div id="text-wrap">
-    <p id="error-msg">Incorrect Password</p>
-    <textarea spellcheck=false id="text-field" aria-label="Clipboard text"></textarea>
+    <textarea spellcheck="false" id="text-field" aria-label="Clipboard text"></textarea>
   </div>
+</div>
+<div id="qr-backdrop" hidden>
+  <div id="qr-popover"></div>
 </div>

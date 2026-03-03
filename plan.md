@@ -1,20 +1,42 @@
-# backend/index.ts
+# Major Tasks
 
-The websocket message sent to a subscriber or as the result of a load message
-shout be the same. the message should be a 'set-ciphertext' with a body of an
-encrypted data
+## Security review
+    - local storage "sc" = secure context?
 
-# database schema update
-the database schema needs to be updated to include
-last_accessed as a time, indexed so that it can be loaded in order
+## ID's should also be encrypted?
+ - Comes down to if you want users to know if there is data there. visually I like the plaintext 
+conversion of a bad password as gobbldygook. But this implies that you can check if a secret exists
+for an id. if id "fuck-ice" has an element for example. 
 
-# update system-stats
-should return toal size in kb
-should include last accessed time as unix timestamp
-should be ordered with most recent at the top
+ - if you are encrypting the id, then changing the password changes the storage location. i.e. new
+db entry
 
-index.ts should attach stats
-number of websocket connections
-number of id handlers
+ - really, then, you should just have a long password. password works as both the identifier and
+the encryption key. 
 
-ensure that list of boards is last thing written
+server stores
+
+SHA256(PBKDF2(password)) : AES(PBKDF2(password))
+
+## Debug socket issue
+Websockets quitely get removed from subscribers on backend after a few seconds. Client socket does
+not disconnect but does not get subscribed messages. Cloudflare has websocket hibernation, related?
+I also saw a demo chat app cloudlfare created for durable objects. worth reviewing.
+
+## Redo command line utility.
+Use castle as a base. Add the Util dependency. Extract SecureClient.ts to be its own file and bot
+deno and web compatible. use it in the command line utility.
+
+## Special behaviour for certain id's
+
+- system-stats : Fetches stats from server
+- system-help : Displays help documentation in text area
+- a terry pratchet reference : The password is swordfish
+- cypherpunk / cypherpunk 
+
+## Banner for status?
+connection status updates routed through stdin?
+
+
+## Resolve zoom issue
+Cannot zoom on mobile at all, but, don't want automatic zooming to text inputs

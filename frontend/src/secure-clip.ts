@@ -3,11 +3,12 @@ import css from "./secure-clip.css?raw";
 import eyeOn from "lucide-static/icons/eye.svg?raw";
 import eyeOff from "lucide-static/icons/eye-off.svg?raw";
 import qrCode from "lucide-static/icons/qr-code.svg?raw";
+import circleHelp from "lucide-static/icons/circle-question-mark.svg?raw";
+import dices from "lucide-static/icons/dices.svg?raw";
 import encodeQR from "qr";
 
 type Message =
-  | { action: "set-id"; args: string }
-  | { action: "set-password"; args: string }
+  | { action: "set-passphrase"; args: string }
   | { action: "set-plaintext"; args: string }
   | { action: "set-ciphertext"; args: EncryptedData };
 
@@ -24,226 +25,48 @@ interface WsMessage {
 
 interface State {
   id: string;
-  password: string;
+  passphrase: string;
   plaintext: string;
   encrypted: EncryptedData | false;
   status: string;
 }
 
-export class SecureClip {
-  state: State;
-  ws: WebSocket;
-  render?: (plaintext: string) => void;
-
-  constructor() {
-    this.state = SecureClip.loadStateFromLocalStorage();
-    this.ws = this.initWebSocket();
-  }
-
-  private static loadStateFromLocalStorage(): State {
-    return {
-      id: localStorage.getItem("sc:id") ?? "swordfish",
-      password: localStorage.getItem("sc:password") ?? "swordfish",
-      plaintext: "",
-      encrypted: false,
-      status: "",
-    };
-  }
-
-  private initWebSocket(): WebSocket {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/api/ws`);
-    ws.onopen = () => this.load();
-    ws.onmessage = (e) => this.handleMessage(JSON.parse(e.data));
-    ws.onerror = (e) => console.error("WS error", e);
-    ws.onclose = () => console.log("WS closed");
-    return ws;
-  }
-
-  async stdin(message: Message) {
-    let matched = true;
-    switch (message.action) {
-      case "set-id": {
-        this.send("unsubscribe", { id: this.state.id });
-        this.state.id = message.args;
-        localStorage.setItem("sc:id", message.args);
-        this.state.status = "loading";
-        this.load();
-        break;
-      }
-      case "set-password": {
-        this.state.password = message.args;
-        localStorage.setItem("sc:password", message.args);
-        if (this.state.encrypted) {
-          const { valid, plaintext } = await this.getDecrypted(this.state.encrypted);
-          this.state.plaintext = plaintext;
-          this.state.status = valid ? "" : "HMAC Invalid";
-        }
-        break;
-      }
-      case "set-plaintext": {
-        this.state.plaintext = message.args;
-        const encrypted = await Crypt.encrypt(message.args, this.state.password);
-        this.state.encrypted = encrypted;
-        this.send("update", { id: this.state.id, ciphertext: encrypted });
-        break;
-      }
-      case "set-ciphertext": {
-        const ciphertext = message.args;
-        if (message.args.ciphertext) {
-          this.state.encrypted = ciphertext;
-          const { valid, plaintext } = await this.getDecrypted(ciphertext);
-          this.state.plaintext = plaintext;
-          this.state.status = valid ? "" : "HMAC Invalid";
-        } else {
-          this.state.plaintext = "";
-          this.state.status = ""
-        }
-        break;
-      }
-      default:
-        matched = false;
-    }
-    if (matched) this.render?.(this.state.plaintext);
-  }
-
-  private async getDecrypted(data: EncryptedData): Promise<{ valid: boolean; plaintext: string }> {
-    if (this.state.id === "system-stats") return { valid: true, plaintext: data.ciphertext };
-    return Crypt.decrypt(data, this.state.password);
-  }
-
-  private send(command: string, body?: object) {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify({ command, body }));
-  }
-
-  private load() {
-    const { id } = this.state;
-    this.send("subscribe", { id });
-    this.send("load", { id });
-  }
-
-  private handleMessage(msg: WsMessage) {
-    console.log(msg);
-    if (msg.body.id !== this.state.id) {
-      throw new Error(`id mismatch: ${msg.body.id} !== ${this.state.id}`);
-    }
-    const raw = msg.body.ciphertext;
-    const ciphertext: EncryptedData = {
-      salt: raw?.salt ?? "",
-      sign: raw?.sign ?? "",
-      ciphertext: raw?.ciphertext ?? "",
-    };
-    this.stdin({ action: "set-ciphertext", args: ciphertext });
-  }
+interface ConnectionState {
+  nextRetry: number;
+  failures: number;
+  status: "connected" | "connecting" | "disconnected";
 }
-
-class SecureClipElement extends HTMLElement {
-  core = new SecureClip();
-  shadow?: ShadowRoot;
-
-  initIdField(field: HTMLInputElement, qr: HTMLButtonElement) {
-    field.value = this.core.state.id;
-    field.addEventListener("input", () => {
-      this.core.stdin({ action: "set-id", args: field.value });
-    });
-    qr.innerHTML = qrCode;
-    qr.addEventListener("click", () => this.showQrPopover(field.value));
-  }
-
-  initPasswordField(field: HTMLInputElement, qr: HTMLButtonElement) {
-    field.value = this.core.state.password;
-    field.addEventListener("input", () => {
-      this.core.stdin({ action: "set-password", args: field.value });
-    });
-    qr.innerHTML = qrCode;
-    qr.addEventListener("click", () => this.showQrPopover(field.value));
-  }
-
-  showQrPopover(value: string) {
-    const backdrop = this.shadow!.getElementById("qr-backdrop")!;
-    const popover = this.shadow!.getElementById("qr-popover")!;
-    const svg = encodeQR(value, "svg");
-    popover.innerHTML = svg.replace(">", `><rect width="100%" height="100%" fill="#e8e4c8"/>`);
-    backdrop.hidden = false;
-    const dismiss = () => {
-      backdrop.hidden = true;
-      backdrop.removeEventListener("click", dismiss);
-      document.removeEventListener("keydown", dismiss);
-    };
-    backdrop.addEventListener("click", dismiss);
-    document.addEventListener("keydown", dismiss);
-  }
-
-  initHideShowIcon(field: HTMLInputElement, toggle: HTMLButtonElement) {
-    toggle.addEventListener("click", () => {
-      const show = field.type === "password";
-      field.type = show ? "text" : "password";
-      toggle.innerHTML = show ? eyeOff : eyeOn;
-      toggle.setAttribute("aria-pressed", String(show));
-      toggle.setAttribute("aria-label", show ? "Hide password" : "Show password");
-    });
-  }
-
-  initTextarea(textarea: HTMLTextAreaElement, errorMsg: HTMLParagraphElement) {
-    this.core.render = (plaintext) => {
-      textarea.value = plaintext;
-      errorMsg.textContent = this.core.state.status;
-      errorMsg.classList.toggle("visible", this.core.state.status !== "");
-    };
-
-    let debounce: ReturnType<typeof setTimeout>;
-    let dirty = false;
-
-    const flush = () => {
-      if (!dirty) return;
-      clearTimeout(debounce);
-      dirty = false;
-      this.core.stdin({ action: "set-plaintext", args: textarea.value });
-    };
-
-    textarea.addEventListener("input", (e) => {
-      dirty = true;
-      const target = e.target as HTMLTextAreaElement;
-      clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        dirty = false;
-        this.core.stdin({ action: "set-plaintext", args: target.value });
-      }, 1000);
-    });
-    textarea.addEventListener("blur", flush);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flush();
-    });
-    window.addEventListener("beforeunload", flush);
-  }
-
-  connectedCallback() {
-    this.shadow = this.attachShadow({ mode: "open" });
-    this.shadow.adoptedStyleSheets = [sheet];
-    this.shadow.innerHTML = html;
-
-    const idField = this.shadow.getElementById("id-field") as HTMLInputElement;
-    const idQr = this.shadow.getElementById("id-qr") as HTMLButtonElement;
-    const passwordField = this.shadow.getElementById("password-field") as HTMLInputElement;
-    const passwordQr = this.shadow.getElementById("password-qr") as HTMLButtonElement;
-    const toggle = this.shadow.getElementById("password-toggle") as HTMLButtonElement;
-    const textarea = this.shadow.getElementById("text-field") as HTMLTextAreaElement;
-    const errorMsg = this.shadow.getElementById("error-msg") as HTMLParagraphElement;
-
-    toggle.innerHTML = eyeOn;
-    this.initIdField(idField, idQr);
-    this.initPasswordField(passwordField, passwordQr);
-    this.initHideShowIcon(passwordField, toggle);
-    this.initTextarea(textarea, errorMsg);
-  }
-}
-
-const sheet = new CSSStyleSheet();
-sheet.replaceSync(css);
-customElements.define("secure-clip", SecureClipElement);
 
 class Crypt {
+  /**
+   * Derives a deterministic channel id from the passphrase using PBKDF2
+   * with a fixed salt. Slow by design — makes passphrase brute-forcing harder.
+   */
+  static async deriveId(passphrase: string): Promise<string> {
+    // System channels use their name directly as the id
+    if (passphrase.startsWith("system-")) return passphrase;
+    if (!crypto?.subtle?.importKey) throw "Subtle crypto not available";
+    if (!crypto?.subtle?.deriveKey) throw "Subtle crypto not available";
+
+    const salt = Crypt.base64toUint8Array("CDVY91c4f1n+j5M8CeJjDg==");
+    const baseKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(passphrase),
+      "PBKDF2",
+      false,
+      ["deriveBits", "deriveKey"],
+    );
+
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: salt.buffer as ArrayBuffer, iterations: 650000, hash: "SHA-256" },
+      baseKey,
+      { name: "AES-CTR", length: 256 },
+      true,
+      ["encrypt", "decrypt"],
+    );
+    return Crypt.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key)));
+  }
+
   /** Encrypts using AES-CTR with a PBKDF2-derived key, signed with HMAC. */
   static async encrypt(plaintext: string, passphrase: string): Promise<EncryptedData> {
     if (!crypto?.subtle?.encrypt) throw "Subtle crypto not available";
@@ -404,4 +227,285 @@ class Crypt {
     }
     return out;
   }
+}
+
+export class SecureClip {
+  /** State that effects the UI */
+  state: State;
+  /** WebSocket connnection to the API server */
+  ws: Promise<WebSocket>;
+  /** Callback provided by web component for rendering the state */
+  render?: (plaintext: string) => void;
+
+  /** Used for exponential backoff on failed connections */
+  connectionState: ConnectionState = { status: "disconnected", nextRetry: 0, failures: 0 };
+
+  constructor() {
+    this.state = SecureClip.loadStateFromLocalStorage();
+    this.ws = this.connect();
+    this.init();
+  }
+
+  private static loadStateFromLocalStorage(): State {
+    const passphrase = localStorage.getItem("sc:passphrase") ?? "swordfish";
+    return {
+      id: "", // populated async in init() before first send
+      passphrase,
+      plaintext: "",
+      encrypted: false,
+      status: "",
+    };
+  }
+
+  private async init() {
+    this.state.id = await Crypt.deriveId(this.state.passphrase);
+    this.send("load", { id: this.state.id });
+    this.send("subscribe", { id: this.state.id });
+  }
+
+  /**
+   * Close any exsiting connection and connect to the server, only resolves when the websocket
+   * has been opened
+   */
+  async connect(): Promise<WebSocket> {
+    if (
+      this.connectionState.status === "connected" || this.connectionState.status === "connecting"
+    ) return this.ws;
+    const { res, rej, done } = hoistPromise<WebSocket>();
+    this.ws = done;
+    this.connectionState.status = "connecting";
+    await sleep(this.connectionState.nextRetry - Date.now());
+
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/api/ws`);
+
+    /** Once connected, resolve the promise and begin clearing past failures */
+    ws.onopen = (e) => {
+      this.connectionState.status = "connected";
+      res(ws);
+      const clearErrors = () => {
+        this.connectionState.failures--;
+        if (this.connectionState.failures) {
+          setTimeout(clearErrors, 20000);
+        }
+      };
+    };
+    ws.onmessage = (e) => this.handleMessage(JSON.parse(e.data));
+    ws.onerror = (e) => rej(e);
+
+    /** Whenever the connection is lost, retry with exponential backoff */
+    ws.onclose = () => {
+      this.connectionState.failures++;
+      this.connectionState.nextRetry = Date.now() +
+        (5000 * Math.pow(2, this.connectionState.failures));
+      this.connectionState.status = "disconnected";
+      this.connect();
+    };
+    return done;
+  }
+
+  /**
+   * Any state change should flow through here. websocket messages that set ciphertext get sent
+   * here. User updates to password / id / plaintext get sent here
+   */
+  async stdin(message: Message) {
+    let matched = true;
+    switch (message.action) {
+      case "set-passphrase": {
+        const oldId = this.state.id;
+        this.state.passphrase = message.args;
+        this.state.id = await Crypt.deriveId(message.args);
+        localStorage.setItem("sc:passphrase", message.args);
+        this.send("unsubscribe", { id: oldId });
+        this.send("subscribe", { id: this.state.id });
+        this.send("load", { id: this.state.id });
+        if (this.state.encrypted) {
+          const { valid, plaintext } = await this.getDecrypted(this.state.encrypted);
+          this.state.plaintext = plaintext;
+          this.state.status = valid ? "" : "HMAC Invalid";
+        }
+        break;
+      }
+      case "set-plaintext": {
+        this.state.plaintext = message.args;
+        const encrypted = await Crypt.encrypt(message.args, this.state.passphrase);
+        this.state.encrypted = encrypted;
+        this.send("update", { id: this.state.id, ciphertext: encrypted });
+        break;
+      }
+      case "set-ciphertext": {
+        const ciphertext = message.args;
+        if (message.args.ciphertext) {
+          this.state.encrypted = ciphertext;
+          const { valid, plaintext } = await this.getDecrypted(ciphertext);
+          this.state.plaintext = plaintext;
+          this.state.status = valid ? "" : "HMAC Invalid";
+        } else {
+          this.state.plaintext = "";
+          this.state.status = "";
+        }
+        break;
+      }
+      default:
+        matched = false;
+    }
+    if (matched) this.render?.(this.state.plaintext);
+  }
+
+  private async getDecrypted(data: EncryptedData): Promise<{ valid: boolean; plaintext: string }> {
+    if (this.state.passphrase === "system-stats") return { valid: true, plaintext: data.ciphertext };
+    return Crypt.decrypt(data, this.state.passphrase);
+  }
+
+  private async send(command: string, body?: object) {
+    const ws = await this.ws;
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ command, body, meta: { date: Date.now() } }));
+  }
+
+  private load() {
+    const { id } = this.state;
+  }
+
+  private handleMessage(msg: WsMessage) {
+    if (msg.body?.id !== this.state.id) {
+      throw new Error(`id mismatch: ${msg.body.id} !== ${this.state.id}`);
+    }
+    console.log(msg.body);
+    const raw = msg.body.ciphertext;
+    const ciphertext: EncryptedData = {
+      salt: raw?.salt ?? "",
+      sign: raw?.sign ?? "",
+      ciphertext: raw?.ciphertext ?? "",
+    };
+    this.stdin({ action: "set-ciphertext", args: ciphertext });
+  }
+}
+
+class SecureClipElement extends HTMLElement {
+  core = new SecureClip();
+  shadow?: ShadowRoot;
+
+  randomizePassphrase() {
+    // TODO: generate a random passphrase and call set-passphrase
+  }
+
+  initPassphraseField(field: HTMLInputElement, qr: HTMLButtonElement, help: HTMLButtonElement) {
+    field.value = this.core.state.passphrase;
+    field.addEventListener("input", () => {
+      this.core.stdin({ action: "set-passphrase", args: field.value });
+    });
+    qr.innerHTML = qrCode;
+    qr.addEventListener("click", () => this.showQrPopover(field.value));
+    help.innerHTML = circleHelp;
+    help.addEventListener("click", () => {
+      field.value = "system-help";
+      this.core.stdin({ action: "set-passphrase", args: "system-help" });
+    });
+  }
+
+  initHideShowIcon(field: HTMLInputElement, toggle: HTMLButtonElement) {
+    toggle.addEventListener("click", () => {
+      const show = field.type === "password";
+      field.type = show ? "text" : "password";
+      toggle.innerHTML = show ? eyeOff : eyeOn;
+      toggle.setAttribute("aria-pressed", String(show));
+      toggle.setAttribute("aria-label", show ? "Hide passphrase" : "Show passphrase");
+    });
+  }
+
+  initTextarea(textarea: HTMLTextAreaElement) {
+    this.core.render = (plaintext) => {
+      textarea.value = plaintext;
+    };
+
+    let debounce: ReturnType<typeof setTimeout>;
+    let dirty = false;
+
+    const flush = () => {
+      if (!dirty) return;
+      clearTimeout(debounce);
+      dirty = false;
+      this.core.stdin({ action: "set-plaintext", args: textarea.value });
+    };
+
+    textarea.addEventListener("input", (e) => {
+      dirty = true;
+      const target = e.target as HTMLTextAreaElement;
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        dirty = false;
+        this.core.stdin({ action: "set-plaintext", args: target.value });
+      }, 1000);
+    });
+    textarea.addEventListener("blur", flush);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+    window.addEventListener("beforeunload", flush);
+  }
+
+  showQrPopover(value: string) {
+    const backdrop = this.shadow!.getElementById("qr-backdrop")!;
+    const popover = this.shadow!.getElementById("qr-popover")!;
+    const svg = encodeQR(value, "svg");
+    popover.innerHTML = svg.replace(">", `><rect width="100%" height="100%" fill="#e8e4c8"/>`);
+    backdrop.hidden = false;
+    const dismiss = () => {
+      backdrop.hidden = true;
+      backdrop.removeEventListener("click", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+    backdrop.addEventListener("click", dismiss);
+    document.addEventListener("keydown", dismiss);
+  }
+
+  connectedCallback() {
+    setInterval(async () => {
+      console.log((await this.core.ws).readyState);
+    }, 1000);
+    this.shadow = this.attachShadow({ mode: "open" });
+    this.shadow.adoptedStyleSheets = [sheet];
+    this.shadow.innerHTML = html;
+
+    const passphraseField = this.shadow.getElementById("passphrase-field") as HTMLInputElement;
+    const passphraseQr = this.shadow.getElementById("passphrase-qr") as HTMLButtonElement;
+    const passphraseHelp = this.shadow.getElementById("passphrase-help") as HTMLButtonElement;
+    const passphraseDice = this.shadow.getElementById("passphrase-dice") as HTMLButtonElement;
+    const toggle = this.shadow.getElementById("passphrase-toggle") as HTMLButtonElement;
+    const textarea = this.shadow.getElementById("text-field") as HTMLTextAreaElement;
+
+    toggle.innerHTML = eyeOn;
+    passphraseDice.innerHTML = dices;
+    passphraseDice.addEventListener("click", () => this.randomizePassphrase());
+    this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
+    this.initHideShowIcon(passphraseField, toggle);
+    this.initTextarea(textarea);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      this.core.connect();
+    });
+  }
+}
+
+const sheet = new CSSStyleSheet();
+sheet.replaceSync(css);
+customElements.define("secure-clip", SecureClipElement);
+
+function hoistPromise<T = any>(): { res: Function; rej: Function; done: Promise<T> } {
+  let res: (param: T | PromiseLike<T>) => void;
+  let rej: (reason: any) => void;
+  const done = new Promise((resolve, reject) => {
+    res = resolve;
+    rej = reject;
+  }) as Promise<T>;
+  return { res: res!, rej: rej!, done };
+}
+
+function sleep(ms: number) {
+  if (ms <= 0) return;
+  const { res, done } = hoistPromise();
+  setTimeout(res, ms);
+  return done;
 }
