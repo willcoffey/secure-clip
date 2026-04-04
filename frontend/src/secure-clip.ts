@@ -1,10 +1,15 @@
 import html from "./secure-clip.html?raw";
 import css from "./secure-clip.css?raw";
+
+/** SVG Icons */
 import eyeOn from "lucide-static/icons/eye.svg?raw";
 import eyeOff from "lucide-static/icons/eye-off.svg?raw";
 import qrCode from "lucide-static/icons/qr-code.svg?raw";
 import circleHelp from "lucide-static/icons/circle-question-mark.svg?raw";
 import dices from "lucide-static/icons/dices.svg?raw";
+import globe from "lucide-static/icons/globe.svg?raw";
+import globeOff from "lucide-static/icons/globe-off.svg?raw";
+
 import encodeQR from "qr";
 import { Crypt, SecureClip } from "./core";
 
@@ -103,12 +108,29 @@ class SecureClipElement extends HTMLElement {
     const passphraseQr = this.shadow.getElementById("passphrase-qr") as HTMLButtonElement;
     const passphraseHelp = this.shadow.getElementById("passphrase-help") as HTMLButtonElement;
     const passphraseDice = this.shadow.getElementById("passphrase-dice") as HTMLButtonElement;
+    const passphraseConnect = this.shadow.getElementById("passphrase-connect") as HTMLButtonElement;
     const toggle = this.shadow.getElementById("passphrase-toggle") as HTMLButtonElement;
     const textarea = this.shadow.getElementById("text-field") as HTMLTextAreaElement;
 
     toggle.innerHTML = eyeOn;
     passphraseDice.innerHTML = dices;
+    passphraseConnect.classList.add("disconnected");
+    passphraseConnect.innerHTML = globeOff;
     passphraseDice.addEventListener("click", () => this.randomizePassphrase(passphraseField));
+
+    this.core.onConnectionChange = (connected) => {
+      passphraseConnect.classList.toggle("connected", connected);
+      passphraseConnect.classList.toggle("disconnected", !connected);
+      passphraseConnect.innerHTML = connected ? globe : globeOff;
+      passphraseField.disabled = !connected;
+      textarea.disabled = !connected;
+    };
+
+    passphraseConnect.addEventListener("click", () => {
+      const action = this.core.connectionStatus === "disconnected" ? "connect" : "disconnect";
+      this.core.stdin({ action });
+    });
+
     this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
     this.initHideShowIcon(passphraseField, toggle);
     this.initTextarea(textarea);

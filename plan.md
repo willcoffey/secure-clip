@@ -1,22 +1,44 @@
-# Major Tasks
+# Connection Icon Click Behaviour
 
-## Security review
-    - local storage "sc" = secure context?
+Clicking the globe icon should toggle the connection.
+Disconnected → connect, connected/connecting → disconnect.
+The action routes through `stdin` like all other state changes.
 
-## Special behaviour for certain id's
-- system-stats : Fetches stats from server
-- system-help : Displays help documentation in text area
-- a terry pratchet reference : The password is swordfish
-- cypherpunk / cypherpunk 
+## 1. Add actions to Message type (core.ts)
 
-## Banner for status?
-connection status updates routed through stdin?
+```ts
+export type Message =
+  | { action: "set-passphrase"; args: string }
+  | { action: "set-plaintext"; args: string }
+  | { action: "set-ciphertext"; args: EncryptedData }
+  | { action: "connect" }
+  | { action: "disconnect" };
+```
 
+## 2. Handle in stdin (core.ts)
 
-## Resolve zoom issue
-Cannot zoom on mobile at all, but, don't want automatic zooming to text inputs
+```ts
+case "connect":
+  this.connect();
+  break;
+case "disconnect":
+  this.disconnect();
+  break;
+```
 
-## Test exponential backoff
+## 3. Make button interactive (secure-clip.css)
 
-## Test server db cleanup
+Remove `pointer-events: none` and `cursor: default` from
+`#passphrase-connect`. The existing hover style already covers
+interactive buttons, so add it back to the hover selector too.
 
+## 4. Wire click handler (secure-clip.ts)
+
+```ts
+passphraseConnect.addEventListener("click", () => {
+  const action = this.core.connectionStatus === "disconnected"
+    ? "connect"
+    : "disconnect";
+  this.core.stdin({ action });
+});
+```
