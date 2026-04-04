@@ -57,6 +57,12 @@ input:focus, #text-field:focus {
   border-color: var(--accent);
 }
 
+input:disabled, #text-field:disabled {
+  color: var(--fg-dim);
+  border-color: #f92672;
+  opacity: 0.5;
+}
+
 input {
   background: var(--bg-sub);
   border: 1px solid var(--border);
@@ -86,6 +92,7 @@ input {
 #passphrase-toggle,
 #passphrase-dice,
 #passphrase-qr,
+#passphrase-connect,
 #passphrase-help {
   background: var(--bg-sub);
   color: var(--fg-dim);
@@ -100,14 +107,25 @@ input {
 #passphrase-toggle:hover,
 #passphrase-dice:hover,
 #passphrase-qr:hover,
+#passphrase-connect:hover,
 #passphrase-help:hover {
   color: var(--fg);
   border-color: var(--accent);
 }
 
+
+#passphrase-connect.connected {
+  color: var(--accent);
+}
+
+#passphrase-connect.disconnected {
+  color: #f92672;
+}
+
 #passphrase-toggle svg,
 #passphrase-dice svg,
 #passphrase-qr svg,
+#passphrase-connect svg,
 #passphrase-help svg {
   width: 2em;
   height: 2em;

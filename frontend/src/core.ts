@@ -3,7 +3,9 @@ import { RESERVED_KEYS } from "./reserved-keys.ts";
 export type Message =
   | { action: "set-passphrase"; args: string }
   | { action: "set-plaintext"; args: string }
-  | { action: "set-ciphertext"; args: EncryptedData };
+  | { action: "set-ciphertext"; args: EncryptedData }
+  | { action: "connect" }
+  | { action: "disconnect" };
 
 export interface EncryptedData {
   salt: string;
@@ -29,8 +31,6 @@ type Connection =
     type: "websocket";
     ws?: Promise<WebSocket>;
     status: "connected" | "connecting" | "disconnected";
-    nextRetry: number;
-    failures: number;
   }
   | { type: "http" };
 
@@ -46,6 +46,7 @@ export class SecureClip {
 
   state: State;
   render?: (plaintext: string) => void;
+  onConnectionChange?: (connected: boolean) => void;
   private connection: Connection;
   private host: string;
   private secure: boolean;
@@ -55,7 +56,7 @@ export class SecureClip {
     this.secure = options.secure ?? true;
     this.connection = options.connection === "post"
       ? { type: "http" }
-      : { type: "websocket", status: "disconnected", nextRetry: 0, failures: 0 };
+      : { type: "websocket", status: "disconnected" };
     this.state = {
       id: "",
       passphrase: options.passphrase,
@@ -68,10 +69,20 @@ export class SecureClip {
 
   private async init() {
     this.state.id = await this.resolveId(this.state.passphrase);
-    await this.send("load", { id: this.state.id });
-    if (this.connection.type === "websocket") {
-      this.send("subscribe", { id: this.state.id });
+    if (this.connection.type === "http") {
+      this.send("load", { id: this.state.id });
+    } else {
+      this.connect();
     }
+  }
+
+  get connectionStatus() {
+    return this.connection.type === "websocket" ? this.connection.status : "http";
+  }
+
+  disconnect() {
+    if (this.connection.type !== "websocket") return;
+    this.connection.ws?.then((ws) => ws.close());
   }
 
   /**
@@ -87,32 +98,25 @@ export class SecureClip {
     const { res, rej, done } = hoistPromise<WebSocket>();
     this.connection.ws = done;
     this.connection.status = "connecting";
-    await sleep(this.connection.nextRetry - Date.now());
-
     const proto = this.secure ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${this.host}/api/ws`);
 
     ws.onopen = () => {
       if (this.connection.type !== "websocket") return;
       this.connection.status = "connected";
+      this.onConnectionChange?.(true);
       res(ws);
-      const clearErrors = () => {
-        if (this.connection.type !== "websocket") return;
-        this.connection.failures--;
-        if (this.connection.failures > 0) setTimeout(clearErrors, 20000);
-      };
-      if (this.connection.failures > 0) clearErrors();
+      this.send("load", { id: this.state.id });
+      this.send("subscribe", { id: this.state.id });
     };
     ws.onmessage = (e) => this.handleMessage(JSON.parse(e.data));
     ws.onerror = (e) => rej(e);
 
-    /** Whenever the connection is lost, retry with exponential backoff */
     ws.onclose = () => {
       if (this.connection.type !== "websocket") return;
-      this.connection.failures++;
-      this.connection.nextRetry = Date.now() + 5000 * Math.pow(2, this.connection.failures);
       this.connection.status = "disconnected";
-      this.connect();
+      this.onConnectionChange?.(false);
+      // this.connect();
     };
     return done;
   }
@@ -158,6 +162,12 @@ export class SecureClip {
         }
         break;
       }
+      case "connect":
+        this.connect();
+        break;
+      case "disconnect":
+        this.disconnect();
+        break;
       default:
         matched = false;
     }
