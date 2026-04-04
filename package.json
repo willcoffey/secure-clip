@@ -1,8 +1,7 @@
 {
   "scripts": {
     "check": "tsc -p frontend/tsconfig.json --watch & tsc -p backend/tsconfig.json --watch",
-    "dev": "vite build frontend --watch",
-    "build": "vite build frontend",
+    "build": "vite build frontend --watch",
     "worker": "wrangler dev --config backend/wrangler.toml --port 3000 --ip 0.0.0.0",
     "deploy": "vite build frontend && wrangler deploy --config backend/wrangler.toml"
   },
