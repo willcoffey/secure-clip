@@ -50,6 +50,7 @@ export class SecureClip {
   private connection: Connection;
   private host: string;
   private secure: boolean;
+  private ready: Promise<void>;
 
   constructor(options: SecureClipOptions) {
     this.host = options.host;
@@ -64,9 +65,15 @@ export class SecureClip {
       encrypted: false,
       status: "",
     };
-    this.init();
+    this.ready = this.init();
   }
 
+  /**
+   * @TODO - crypto was hacked in from old project. encrypt() runs its own
+   * PBKDF2 and so does resolveId(). The id should be cached so it is not
+   * re-derived on every passphrase change, and the whole crypto pipeline
+   * should be reviewed for redundant key derivation.
+   */
   private async init() {
     this.state.id = await this.resolveId(this.state.passphrase);
     if (this.connection.type === "http") {
@@ -90,6 +97,7 @@ export class SecureClip {
    * when the websocket has been opened. Throws if called on an http connection.
    */
   async connect(): Promise<WebSocket> {
+    await this.ready;
     if (this.connection.type === "http") throw new Error("connect() called on http connection");
     if (
       this.connection.status === "connected" ||
@@ -126,6 +134,7 @@ export class SecureClip {
    * ciphertext get sent here. User updates to passphrase / plaintext too.
    */
   async stdin(message: Message) {
+    await this.ready;
     let matched = true;
     switch (message.action) {
       case "set-passphrase": {
