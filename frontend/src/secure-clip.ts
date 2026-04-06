@@ -75,7 +75,7 @@ class SecureClipElement extends HTMLElement {
       debounce = setTimeout(() => {
         dirty = false;
         this.core.stdin({ action: "set-plaintext", args: target.value });
-      }, 1000);
+      }, 200);
     });
     textarea.addEventListener("blur", flush);
     document.addEventListener("visibilitychange", () => {
