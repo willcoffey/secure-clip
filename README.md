@@ -6,6 +6,8 @@ AES, with QR codes as a convenient way to share keys locally.
 This project started as a means to learn Claude code and Cloudflare workers, but has become a tool
 that I use every day. It's designed to be self-hostable for free as a Cloudflare Durable Worker.
 
+`core.ts` contains minimal client + encryption logc. Can be tested in isolation to verify security.
+
 # Usage
 ## VIM
 In my `.vimrc` I have a couple short functions for copying and pasting to the clipboard. `vv` will

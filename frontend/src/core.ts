@@ -1,10 +1,23 @@
-/** How to communicate with server, either via POST requests or websocket */
-/**
- * TODO - Exponential backoff on websocket reconnection
- */
+// Debug logging
 const DEBUG = false;
+const SALT = "CDVY91c4f1n+j5M8CeJjDg==";
+
+// Uint8Array indexed by char code — direct array lookup, no hashing
+//deno-fmt-ignore
+const B64_REVERSE = new Uint8Array(128);
+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  .split("").forEach((c, i) => { B64_REVERSE[c.charCodeAt(0)] = i; });
+
+/**
+ * API is transport agnostic, but sockets are needed for the server to send updates to client
+ */
 type Transport = "post" | "socket";
 
+/**
+ * API surface for SecureClip, which abstracts out the network and crypto logic
+ *
+ * sending these triggers network actions e.g. set-passphrase -> query for that id
+ */
 export type Message =
   | { command: "set-passphrase"; body: string }
   | { command: "set-plaintext"; body: string }
@@ -12,6 +25,7 @@ export type Message =
   | { command: "connect" }
   | { command: "disconnect" };
 
+// Encrypted value stored on server, id is SHA256(PBKDF2(passphrase, salt))
 export interface Encrypted {
   iv: string;
   ciphertext: string;
@@ -21,7 +35,7 @@ export interface State {
   passphrase: string;
   plaintext: string;
   encrypted: Encrypted | false;
-  status: string;
+  connected: boolean;
 }
 
 export interface SecureClipOptions {
@@ -35,20 +49,14 @@ export interface SecureClipOptions {
  * communicate with server.
  */
 export class SecureClip {
-  static RESERVED_KEYS = ["system-stats", "system-help"];
   state: State;
-  options: Required<SecureClipOptions>;
-  socket: Promise<WebSocket> | false = false;
-  connected: boolean = false;
+  /** Render hook used for web component, called when state changes, including connection status  */
+  render: (command: string) => void = console.log;
 
+  private options: Required<SecureClipOptions>;
+  private socket: Promise<WebSocket> | false = false;
   /** Cache the PBKDF2 operations since they are expensive */
-  cryptoCache: Record<string, { id: string; key: string }> = {};
-
-  /** Render hook used for web component, called when state changes */
-  render: () => void = console.log;
-
-  /** @TODO - wrap inside render */
-  onConnectionChange?: (connected: boolean) => void;
+  private cryptoCache: Record<string, { id: string; key: string }> = {};
 
   constructor(options: SecureClipOptions, passphrase: string) {
     this.options = {
@@ -56,33 +64,32 @@ export class SecureClip {
       ssl: options.ssl ?? true,
       transport: options.transport ?? "post",
     };
+
     this.state = {
       passphrase: passphrase,
       plaintext: "",
       encrypted: false,
-      status: "",
+      connected: false,
     };
   }
 
   /**
-   * Runs PBKDF2 for key expansion on the passphrase and creates an id for it
-   * by running SHA256 on it.
-   */
-  async deriveKeyAndId(passphrase: string): Promise<{ id: string; key: string }> {
-    if (this.cryptoCache[passphrase]) return this.cryptoCache[passphrase];
-    const key = await Crypt.expandKey(passphrase);
-    const id = await Crypt.sha256(key);
-    this.cryptoCache[passphrase] = { key, id };
-    return this.cryptoCache[passphrase];
-  }
-  /**
    * stdin serves as the public interface for this class. Anything using this
-   * class should only sudmit commands through stdin, no direct method calling
+   * class should only submit commands through stdin, no direct method calling.
+   * messages from the server are also processed here.
+   *
+   * messages trigger different behaviours.
+   *
+   * set-plaintext = encrypt plaintext, send update to server
+   * set-passphrase = derive key & id, send load request
+   * set-ciphertext = decrypt ciphertext, set plaintext for user to see
+   *
+   * set-ciphertext is generally only going to be called via message handling
+   * a response / socket message. could in theory be used via readfile
    */
   async stdin(message: Message) {
     debugLog("STDIN", message);
     const { transport } = this.options;
-    let matched = true;
 
     switch (message.command) {
       case "set-passphrase": {
@@ -95,7 +102,6 @@ export class SecureClip {
         this.state.passphrase = message.body;
         this.state.plaintext = "";
         this.state.encrypted = false;
-        this.state.status = "";
         this.send("load", { id });
         break;
       }
@@ -131,28 +137,36 @@ export class SecureClip {
         /** Close the websocket connection */
         this.disconnect();
         break;
-      default:
-        matched = false;
     }
 
-    /** If any command was processed, trigger a re-render */
-    if (matched) this.render();
+    /** render based on what command triggered state change */
+    this.render(message.command);
   }
 
-  async load() {
+  /**
+   * Runs PBKDF2 for key expansion on the passphrase and creates an id for it
+   * by running SHA256 on it.
+   */
+  private async deriveKeyAndId(passphrase: string): Promise<{ id: string; key: string }> {
+    if (this.cryptoCache[passphrase]) return this.cryptoCache[passphrase];
+    const expanded = await Crypt.deriveKeyAndId(passphrase);
+    this.cryptoCache[passphrase] = expanded;
+    return expanded;
+  }
+
+  private async load() {
     const { id } = await this.deriveKeyAndId(this.state.passphrase);
     this.send("load", { id });
   }
 
-  /** */
-  async connect(): Promise<any> {
+  private async connect(): Promise<any> {
     /** If a socket promise already exists, return it */
     if (this.socket) return this.socket;
     const { res, rej, done } = hoistPromise<WebSocket>();
     this.socket = done;
-
     const proto = this.options.ssl ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${this.options.host}/api/ws`);
+
     /**
      * once socket is open, load & subscribe to the board and resolve the
      * ready promise.
@@ -160,28 +174,28 @@ export class SecureClip {
     ws.onopen = async () => {
       const { id } = await this.deriveKeyAndId(this.state.passphrase);
       res(ws);
-      this.connected = true;
+      this.state.connected = true;
       this.send("load", { id });
       this.send("subscribe", { id });
-      this.onConnectionChange?.(true);
+      this.render("socket-open");
     };
 
     /** Add message handling */
     ws.onmessage = (e: any) => this.handleMessage(JSON.parse(e.data) as Message);
     ws.onclose = () => {
-      this.onConnectionChange?.(false);
       this.socket = false;
-      this.connected = false;
+      this.state.connected = false;
+      this.render("socket-close");
     };
     ws.onerror = console.log;
     return done;
   }
 
-  async disconnect() {
+  private async disconnect() {
     if (this.options.transport !== "socket" || !this.socket) return;
     const socket = await this.socket;
     socket.close();
-    this.connected = false // should also get set by close event
+    this.state.connected = false; // should also get set by close event
     this.socket = false;
   }
 
@@ -195,7 +209,7 @@ export class SecureClip {
     const { transport, host, ssl } = this.options;
     if (transport === "socket") {
       if (!this.socket) await this.connect();
-      if (this.socket && this.connected) {
+      if (this.socket && this.state.connected) {
         (await this.socket).send(JSON.stringify({ command, body, meta: { date: Date.now() } }));
       }
     } else {
@@ -223,9 +237,8 @@ export class SecureClip {
   private handleMessage(msg: Message) {
     if (msg.command === "set-plaintext") {
       this.state.encrypted = false;
-      this.state.status = "";
       this.state.plaintext = msg.body;
-      this.render();
+      this.render("set-plaintext");
       return;
     }
     if (msg.command === "set-ciphertext") {
@@ -235,36 +248,77 @@ export class SecureClip {
 }
 
 export class Crypt {
-  static async expandKey(passphrase: string): Promise<string> {
+  /**
+   * Derives an encryption key and server ID from a passphrase.
+   * PBKDF2 handles the slow password-hardening step; HKDF then
+   * splits the output into two independent keys so the server ID
+   * never leaks information about the encryption key.
+   */
+  static async deriveKeyAndId(passphrase: string): Promise<{ key: string; id: string }> {
     Crypt.assertSubtleCrypto();
+    const salt = Crypt.base64toUint8Array(SALT);
+
     /**
-     * In this context, purpose of the salt is to prevent rainbow tables. constant salt needed for
-     * deterministic ids. Best practice would be to generate on per-host basis
+     * get seed into pbkdf2 and set crypto settings
      */
-    const salt = Crypt.base64toUint8Array("CDVY91c4f1n+j5M8CeJjDg==");
-    const baseKey = await crypto.subtle.importKey(
+    const pbkdf2 = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(passphrase),
       "PBKDF2",
       false,
-      ["deriveBits", "deriveKey"],
+      ["deriveBits"],
     );
 
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: salt.buffer as ArrayBuffer, iterations: 650000, hash: "SHA-256" },
-      baseKey,
-      { name: "AES-CTR", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
+    /** Run the keygen to derive 256 bits */
+    const material = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt, iterations: 650000, hash: "SHA-256" },
+      pbkdf2,
+      256,
     );
-    return Crypt.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key)));
-  }
 
-  static async sha256(input: string): Promise<string> {
-    Crypt.assertSubtleCrypto();
-    const data = new TextEncoder().encode(input);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    return Crypt.uint8ArrayToBase64(new Uint8Array(hashBuffer));
+    /** Import expanded passphrase into hkdf */
+    const hkdf = await crypto.subtle.importKey(
+      "raw",
+      material,
+      "HKDF",
+      false,
+      ["deriveBits"],
+    );
+
+    /**
+     * See various refs. skipping deriveKey since we just need bits
+     * https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
+     * https://developer.mozilla.org/en-US/docs/Web/API/HkdfParams
+     * https://datatracker.ietf.org/doc/html/rfc5869#section-3.3
+     *
+     * an empty salt is used because api does not give an option to skip key
+     * expansion, which PBKDF2 already solved.
+     */
+    const key = await crypto.subtle.deriveBits(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(32),
+        info: new TextEncoder().encode("key"),
+      },
+      hkdf,
+      256,
+    );
+    const id = await crypto.subtle.deriveBits(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(32),
+        info: new TextEncoder().encode("id"),
+      },
+      hkdf,
+      256,
+    );
+
+    return {
+      key: Crypt.uint8ArrayToBase64(new Uint8Array(key)),
+      id: Crypt.uint8ArrayToBase64(new Uint8Array(id)),
+    };
   }
 
   /**
@@ -328,18 +382,16 @@ export class Crypt {
 
     const arr = new Uint8Array(outputSize);
 
-    //deno-fmt-ignore
-    const reverseMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10, L: 11, M: 12, N: 13, O: 14, P: 15, Q: 16, R: 17, S: 18, T: 19, U: 20, V: 21, W: 22, X: 23, Y: 24, Z: 25, a: 26, b: 27, c: 28, d: 29, e: 30, f: 31, g: 32, h: 33, i: 34, j: 35, k: 36, l: 37, m: 38, n: 39, o: 40, p: 41, q: 42, r: 43, s: 44, t: 45, u: 46, v: 47, w: 48, x: 49, y: 50, z: 51, "0": 52, "1": 53, "2": 54, "3": 55, "4": 56, "5": 57, "6": 58, "7": 59, "8": 60, "9": 61, "+": 62, "/": 63, "=": 0 };
-
     for (let i = 0; i < str.length; i += 4) {
       const arrIndex = (i / 4) * 3;
-      arr[arrIndex] = (reverseMap[str[i]] << 2) | (reverseMap[str[i + 1]] >> 4);
+      arr[arrIndex] = (B64_REVERSE[str.charCodeAt(i)] << 2) | (B64_REVERSE[str.charCodeAt(i + 1)] >> 4);
       if (arr.length > arrIndex + 1) {
-        arr[arrIndex + 1] = ((reverseMap[str[i + 1]] & 0b00001111) << 4) |
-          (reverseMap[str[i + 2]] >> 2);
+        arr[arrIndex + 1] = ((B64_REVERSE[str.charCodeAt(i + 1)] & 0b00001111) << 4) |
+          (B64_REVERSE[str.charCodeAt(i + 2)] >> 2);
       }
       if (arr.length > arrIndex + 2) {
-        arr[arrIndex + 2] = ((reverseMap[str[i + 2]] & 0b00000011) << 6) | reverseMap[str[i + 3]];
+        arr[arrIndex + 2] = ((B64_REVERSE[str.charCodeAt(i + 2)] & 0b00000011) << 6) |
+          B64_REVERSE[str.charCodeAt(i + 3)];
       }
     }
     return arr;
@@ -387,13 +439,6 @@ export function hoistPromise<T = any>(): { res: Function; rej: Function; done: P
     rej = reject;
   }) as Promise<T>;
   return { res: res!, rej: rej!, done };
-}
-
-export function sleep(ms: number) {
-  if (ms <= 0) return;
-  const { res, done } = hoistPromise();
-  setTimeout(res as () => void, ms);
-  return done;
 }
 
 function debugLog(...args: unknown[]) {

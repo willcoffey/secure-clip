@@ -1,5 +1,5 @@
 import { parseCommandLineOptions } from "utilities";
-import { SecureClip, sleep } from "./core.ts";
+import { SecureClip } from "./core.ts";
 
 async function main() {
   const opts = parseCommandLineOptions(Deno.args, {
@@ -45,7 +45,8 @@ Examples:
           const core = new SecureClip({ host, ssl, transport: "socket" }, passphrase);
           const limit = opts.options.n ? parseInt(opts.options.n) : Infinity;
           let count = 0;
-          core.render = () => {
+          core.render = (command) => {
+            if (command !== "set-plaintext" && command !== "set-ciphertext") return;
             console.log(core.state.plaintext);
             if (++count >= limit) Deno.exit(0);
           };
@@ -55,7 +56,11 @@ Examples:
       case "get":
         {
           const core = new SecureClip({ host, ssl, transport: "post" }, passphrase);
-          core.render = () => console.log(core.state.plaintext);
+          core.render = (command) => {
+            if (command === "set-ciphertext" || command === "set-plaintext") {
+              console.log(core.state.plaintext);
+            }
+          };
           await core.load();
         }
         break;

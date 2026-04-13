@@ -1,4 +1,6 @@
 # Notes on security model and limitations
+- !IMPORTANT - I don't think the meta timestamp is encrypted, an attacker could send old messages to
+user if they MITM.
 
 - Functions as an encryption oracle, IV collision = bad bad bad, web crypto doesn't support 
 AES-GCM-SIV / RFC 8452 which mitigates nonce collison. Need to do the math.

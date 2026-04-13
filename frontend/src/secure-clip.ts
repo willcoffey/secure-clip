@@ -54,10 +54,6 @@ class SecureClipElement extends HTMLElement {
   }
 
   initTextarea(textarea: HTMLTextAreaElement) {
-    this.core.render = () => {
-      textarea.value = this.core.state.plaintext;
-    };
-
     let debounce: ReturnType<typeof setTimeout>;
     let dirty = false;
 
@@ -118,27 +114,31 @@ class SecureClipElement extends HTMLElement {
     passphraseConnect.innerHTML = globeOff;
     passphraseDice.addEventListener("click", () => this.randomizePassphrase(passphraseField));
 
-    this.core.onConnectionChange = (connected) => {
-      passphraseConnect.classList.toggle("connected", connected);
-      passphraseConnect.classList.toggle("disconnected", !connected);
-      passphraseConnect.innerHTML = connected ? globe : globeOff;
-      passphraseField.disabled = !connected;
-      textarea.disabled = !connected;
-    };
-
     passphraseConnect.addEventListener("click", () => {
-      const command = this.core.connected ? "disconnect" : "connect";
+      const command = this.core.state.connected ? "disconnect" : "connect";
       this.core.stdin({ command });
     });
 
     this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
     this.initHideShowIcon(passphraseField, toggle);
     this.initTextarea(textarea);
-    this.core.connect();
+    this.core.render = (command) => {
+      if (command === "set-plaintext" || command === "set-ciphertext") {
+        textarea.value = this.core.state.plaintext;
+      } else if (command === "socket-open" || command === "socket-close") {
+        const connected = this.core.state.connected;
+        passphraseConnect.classList.toggle("connected", connected);
+        passphraseConnect.classList.toggle("disconnected", !connected);
+        passphraseConnect.innerHTML = connected ? globe : globeOff;
+        passphraseField.disabled = !connected;
+        textarea.disabled = !connected;
+      }
+    };
+    this.core.stdin({ command: "connect" });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
-      this.core.connect();
+      this.core.stdin({ command: "connect" });
     });
   }
 }
