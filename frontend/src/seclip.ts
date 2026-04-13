@@ -78,15 +78,3 @@ Examples:
 }
 
 main();
-
-// Catch uncaught synchronous errors
-globalThis.addEventListener("error", (event) => {
-  console.error("Uncaught error:", event.error);
-  console.error("Message:", event.message);
-  console.error("File:", event.filename, "Line:", event.lineno);
-});
-
-// Catch unhandled promise rejections
-globalThis.addEventListener("unhandledrejection", (event) => {
-  console.error("Unhandled rejection:", event.reason);
-});
