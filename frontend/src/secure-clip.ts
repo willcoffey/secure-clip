@@ -15,31 +15,31 @@ import { Crypt, SecureClip } from "./core";
 
 class SecureClipElement extends HTMLElement {
   core = new SecureClip({
-    passphrase: localStorage.getItem("sc:passphrase") ?? "swordfish",
     host: location.host,
-    secure: location.protocol === "https:",
-  });
+    ssl: location.protocol === "https:",
+    transport: "socket",
+  }, localStorage.getItem("sc:passphrase") ?? "swordfish");
   shadow?: ShadowRoot;
 
   randomizePassphrase(field: HTMLInputElement) {
     const passphrase = Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false);
     field.value = passphrase;
     localStorage.setItem("sc:passphrase", passphrase);
-    this.core.stdin({ action: "set-passphrase", args: passphrase });
+    this.core.stdin({ command: "set-passphrase", body: passphrase });
   }
 
   initPassphraseField(field: HTMLInputElement, qr: HTMLButtonElement, help: HTMLButtonElement) {
     field.value = this.core.state.passphrase;
     field.addEventListener("input", () => {
       localStorage.setItem("sc:passphrase", field.value);
-      this.core.stdin({ action: "set-passphrase", args: field.value });
+      this.core.stdin({ command: "set-passphrase", body: field.value });
     });
     qr.innerHTML = qrCode;
     qr.addEventListener("click", () => this.showQrPopover(field.value));
     help.innerHTML = circleHelp;
     help.addEventListener("click", () => {
       field.value = "system-help";
-      this.core.stdin({ action: "set-passphrase", args: "system-help" });
+      this.core.stdin({ command: "set-passphrase", body: "system-help" });
     });
   }
 
@@ -54,8 +54,8 @@ class SecureClipElement extends HTMLElement {
   }
 
   initTextarea(textarea: HTMLTextAreaElement) {
-    this.core.render = (plaintext) => {
-      textarea.value = plaintext;
+    this.core.render = () => {
+      textarea.value = this.core.state.plaintext;
     };
 
     let debounce: ReturnType<typeof setTimeout>;
@@ -65,7 +65,7 @@ class SecureClipElement extends HTMLElement {
       if (!dirty) return;
       clearTimeout(debounce);
       dirty = false;
-      this.core.stdin({ action: "set-plaintext", args: textarea.value });
+      this.core.stdin({ command: "set-plaintext", body: textarea.value });
     };
 
     textarea.addEventListener("input", (e) => {
@@ -74,7 +74,7 @@ class SecureClipElement extends HTMLElement {
       clearTimeout(debounce);
       debounce = setTimeout(() => {
         dirty = false;
-        this.core.stdin({ action: "set-plaintext", args: target.value });
+        this.core.stdin({ command: "set-plaintext", body: target.value });
       }, 200);
     });
     textarea.addEventListener("blur", flush);
@@ -127,13 +127,14 @@ class SecureClipElement extends HTMLElement {
     };
 
     passphraseConnect.addEventListener("click", () => {
-      const action = this.core.connectionStatus === "disconnected" ? "connect" : "disconnect";
-      this.core.stdin({ action });
+      const command = this.core.connected ? "disconnect" : "connect";
+      this.core.stdin({ command });
     });
 
     this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
     this.initHideShowIcon(passphraseField, toggle);
     this.initTextarea(textarea);
+    this.core.connect();
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;

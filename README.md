@@ -92,6 +92,16 @@ use this.
 
 # Development
 ## Quick Start
+I run 3 scripts in seperate terminal windows:
+
+Watch for changes and typecheck front and backend
+`npm run check`
+
+Watch for changes and build static assets using vite
+`npm run check`
+
+Run the local dev server which hosts static assets and backend API
+`npm run worker`
 
 ## Overview
 There are some key ideas I'm trying to follow during development, for AI based development as well
@@ -108,23 +118,13 @@ same code as the PWA. This both enforces good code practices vis-a-vis forced se
 specific code, and serves as a way to give Agents a simple way to interact with the backend for
 testing and usage.
 
-
-
-Currently development is not streamlined. I run 3 `package.json` scripts in separate terminal 
-windows. No hot reloading support
-
-@TODO - Setup worker dev to proxy assets to vite server for hot reloading
-
- - `npm run check` - To do type checking on front and backend code
- - `npm run worker` - To run backend worker, which handles API as well as static hosting of 
-built assets
- - `npm run build` - Use vite to build the frontend, watching for file changes
-
-
 # Deployment
+@TODO - Walk through process of login, create worker, etc.
+`npm run deploy`
 
 # Possible Feature
-
-## Add markdown parsing option
-I already have a web standard compatible markdown parser for my blog. Would be fairly easy to add.
-
+ - Dev: proxy to vite server for hot reloading
+ - append endpoint in addition to set
+ - QR Code scanning
+ - In browser markdown parsing
+ - Better reconnection logic

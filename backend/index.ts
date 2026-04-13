@@ -1,8 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
-import { Service, Handler } from "./Service";
-import { RESERVED_KEYS } from "../frontend/src/reserved-keys.ts";
-
-const RESERVED = new Set(RESERVED_KEYS);
+import { Handler, Service } from "./Service";
+interface Encrypted { iv: string; ciphertext: string }
+type Message =
+  | { command: "set-passphrase"; body: string }
+  | { command: "set-plaintext"; body: string }
+  | { command: "set-ciphertext"; body: Encrypted | null }
+  | { command: "connect" }
+  | { command: "disconnect" };
 
 const HELP_TEXT = `secure-clip: encrypted shared clipboard
 
@@ -21,33 +25,32 @@ interface Env {
 
 interface Command {
   command: string;
-  body: Record<string, string>;
+  body: Record<string, any>;
 }
 
 async function route(
   cmd: Command,
   service: Service,
   ctx: { wsConnections: number; idHandlers: number } = { wsConnections: 0, idHandlers: 0 },
-): Promise<{ data?: object; error?: string } | null> {
+): Promise<{ data?: Message; error?: string } | null> {
   switch (cmd.command) {
     case "load": {
-      if (RESERVED.has(cmd.body.id)) {
-        let plaintext = "";
-        if (cmd.body.id === "system-stats") plaintext = service.systemStats(ctx);
-        if (cmd.body.id === "system-help") plaintext = HELP_TEXT;
-        return { data: { command: "set-plaintext", body: { id: cmd.body.id, plaintext } } };
+      if (cmd.body.id === "system-stats") {
+        return { data: { command: "set-plaintext", body: service.systemStats(ctx) } };
+      }
+      if (cmd.body.id === "system-help") {
+        return { data: { command: "set-plaintext", body: HELP_TEXT } };
       }
       const raw = await service.load({ id: cmd.body.id });
-      const ciphertext = raw ? JSON.parse(raw) : null;
-      return { data: { command: "set-ciphertext", body: { id: cmd.body.id, ciphertext } } };
+      return { data: { command: "set-ciphertext", body: raw ? JSON.parse(raw) : null } };
     }
     case "update": {
-      if (RESERVED.has(cmd.body.id)) return {};
+      if (['system-stats', 'system-help'].indexOf(cmd.body.id) !== -1) return {};
       try {
         await service.update({ id: cmd.body.id, ciphertext: JSON.stringify(cmd.body.ciphertext) });
         return {};
       } catch (e: any) {
-        return { error: e.message };
+        return { data: e.toString() };
       }
     }
   }
@@ -80,7 +83,7 @@ export class PlatformConnector extends DurableObject {
     const { command, body } = data as Record<string, unknown>;
     if (typeof command !== "string") return null;
     if (body !== undefined && (typeof body !== "object" || Array.isArray(body))) return null;
-    return { command, body: (body ?? {}) as Record<string, string> };
+    return { command, body: (body ?? {}) as Record<string, any> };
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -113,7 +116,7 @@ export class PlatformConnector extends DurableObject {
     const entries: Array<{ id: string; handler: Handler }> = [];
     for (const id of ids) {
       const handler: Handler = ({ id, ciphertext }) => {
-        ws.send(JSON.stringify({ command: "set-ciphertext", body: { id, ciphertext: JSON.parse(ciphertext) } }));
+        ws.send(JSON.stringify({ command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message));
       };
       entries.push({ id, handler });
       this.service.subscribe({ id, handler });
@@ -141,7 +144,7 @@ export class PlatformConnector extends DurableObject {
 
     if (cmd.command === "subscribe") {
       const handler: Handler = ({ id, ciphertext }) => {
-        ws.send(JSON.stringify({ command: "set-ciphertext", body: { id, ciphertext: JSON.parse(ciphertext) } }));
+        ws.send(JSON.stringify({ command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message));
       };
       const entries = this.wsHandlers.get(ws) ?? [];
       entries.push({ id: cmd.body.id, handler });
