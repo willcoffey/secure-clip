@@ -1,246 +1,246 @@
-import { RESERVED_KEYS } from "./reserved-keys.ts";
+/** How to communicate with server, either via POST requests or websocket */
+/**
+ * TODO - Exponential backoff on websocket reconnection
+ */
+const DEBUG = false;
+type Transport = "post" | "socket";
 
 export type Message =
-  | { action: "set-passphrase"; args: string }
-  | { action: "set-plaintext"; args: string }
-  | { action: "set-ciphertext"; args: EncryptedData }
-  | { action: "connect" }
-  | { action: "disconnect" };
+  | { command: "set-passphrase"; body: string }
+  | { command: "set-plaintext"; body: string }
+  | { command: "set-ciphertext"; body: Encrypted | null }
+  | { command: "connect" }
+  | { command: "disconnect" };
 
-export interface EncryptedData {
-  salt: string;
-  sign: string;
+export interface Encrypted {
+  iv: string;
   ciphertext: string;
 }
 
-export interface WsMessage {
-  command: string;
-  body: { id: string; ciphertext: EncryptedData | null; plaintext?: string };
-}
-
 export interface State {
-  id: string;
   passphrase: string;
   plaintext: string;
-  encrypted: EncryptedData | false;
+  encrypted: Encrypted | false;
   status: string;
 }
 
-type Connection =
-  | {
-    type: "websocket";
-    ws?: Promise<WebSocket>;
-    status: "connected" | "connecting" | "disconnected";
-  }
-  | { type: "http" };
-
 export interface SecureClipOptions {
-  passphrase: string;
   host: string;
-  secure?: boolean; // true = wss/https, false = ws/http; defaults to true
-  connection?: "ws" | "post";
+  ssl?: boolean;
+  transport?: "socket" | "post";
 }
 
+/**
+ * Client for backend, manages internal state, connection etc needed to
+ * communicate with server.
+ */
 export class SecureClip {
-  static RESERVED_KEYS = RESERVED_KEYS;
-
+  static RESERVED_KEYS = ["system-stats", "system-help"];
   state: State;
-  render?: (plaintext: string) => void;
-  onConnectionChange?: (connected: boolean) => void;
-  private connection: Connection;
-  private host: string;
-  private secure: boolean;
-  private ready: Promise<void>;
+  options: Required<SecureClipOptions>;
+  socket: Promise<WebSocket> | false = false;
+  connected: boolean = false;
 
-  constructor(options: SecureClipOptions) {
-    this.host = options.host;
-    this.secure = options.secure ?? true;
-    this.connection = options.connection === "post"
-      ? { type: "http" }
-      : { type: "websocket", status: "disconnected" };
+  /** Cache the PBKDF2 operations since they are expensive */
+  cryptoCache: Record<string, { id: string; key: string }> = {};
+
+  /** Render hook used for web component, called when state changes */
+  render: () => void = console.log;
+
+  /** @TODO - wrap inside render */
+  onConnectionChange?: (connected: boolean) => void;
+
+  constructor(options: SecureClipOptions, passphrase: string) {
+    this.options = {
+      host: options.host,
+      ssl: options.ssl ?? true,
+      transport: options.transport ?? "post",
+    };
     this.state = {
-      id: "",
-      passphrase: options.passphrase,
+      passphrase: passphrase,
       plaintext: "",
       encrypted: false,
       status: "",
     };
-    this.ready = this.init();
   }
 
   /**
-   * @TODO - crypto was hacked in from old project. encrypt() runs its own
-   * PBKDF2 and so does resolveId(). The id should be cached so it is not
-   * re-derived on every passphrase change, and the whole crypto pipeline
-   * should be reviewed for redundant key derivation.
+   * Runs PBKDF2 for key expansion on the passphrase and creates an id for it
+   * by running SHA256 on it.
    */
-  private async init() {
-    this.state.id = await this.resolveId(this.state.passphrase);
-    if (this.connection.type === "http") {
-      this.send("load", { id: this.state.id });
-    } else {
-      this.connect();
-    }
+  async deriveKeyAndId(passphrase: string): Promise<{ id: string; key: string }> {
+    if (this.cryptoCache[passphrase]) return this.cryptoCache[passphrase];
+    const key = await Crypt.expandKey(passphrase);
+    const id = await Crypt.sha256(key);
+    this.cryptoCache[passphrase] = { key, id };
+    return this.cryptoCache[passphrase];
   }
-
-  get connectionStatus() {
-    return this.connection.type === "websocket" ? this.connection.status : "http";
-  }
-
-  disconnect() {
-    if (this.connection.type !== "websocket") return;
-    this.connection.ws?.then((ws) => ws.close());
-  }
-
   /**
-   * Close any existing connection and connect to the server, only resolves
-   * when the websocket has been opened. Throws if called on an http connection.
-   */
-  async connect(): Promise<WebSocket> {
-    await this.ready;
-    if (this.connection.type === "http") throw new Error("connect() called on http connection");
-    if (
-      this.connection.status === "connected" ||
-      this.connection.status === "connecting"
-    ) return this.connection.ws!;
-    const { res, rej, done } = hoistPromise<WebSocket>();
-    this.connection.ws = done;
-    this.connection.status = "connecting";
-    const proto = this.secure ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${this.host}/api/ws`);
-
-    ws.onopen = () => {
-      if (this.connection.type !== "websocket") return;
-      this.connection.status = "connected";
-      this.onConnectionChange?.(true);
-      res(ws);
-      this.send("load", { id: this.state.id });
-      this.send("subscribe", { id: this.state.id });
-    };
-    ws.onmessage = (e) => this.handleMessage(JSON.parse(e.data));
-    ws.onerror = (e) => rej(e);
-
-    ws.onclose = () => {
-      if (this.connection.type !== "websocket") return;
-      this.connection.status = "disconnected";
-      this.onConnectionChange?.(false);
-      // this.connect();
-    };
-    return done;
-  }
-
-  /**
-   * Any state change should flow through here. WebSocket messages that set
-   * ciphertext get sent here. User updates to passphrase / plaintext too.
+   * stdin serves as the public interface for this class. Anything using this
+   * class should only sudmit commands through stdin, no direct method calling
    */
   async stdin(message: Message) {
-    await this.ready;
+    debugLog("STDIN", message);
+    const { transport } = this.options;
     let matched = true;
-    switch (message.action) {
+
+    switch (message.command) {
       case "set-passphrase": {
-        const oldId = this.state.id;
-        this.state.passphrase = message.args;
-        this.state.id = await this.resolveId(message.args);
-        if (this.connection.type === "websocket") {
-          this.send("unsubscribe", { id: oldId });
-          this.send("subscribe", { id: this.state.id });
+        const current = await this.deriveKeyAndId(this.state.passphrase);
+        const { id } = await this.deriveKeyAndId(message.body);
+        if (transport === "socket") {
+          this.send("unsubscribe", { id: current.id });
+          this.send("subscribe", { id });
         }
+        this.state.passphrase = message.body;
         this.state.plaintext = "";
         this.state.encrypted = false;
         this.state.status = "";
-        this.send("load", { id: this.state.id });
+        this.send("load", { id });
         break;
       }
       case "set-plaintext": {
-        this.state.plaintext = message.args;
-        const encrypted = await Crypt.encrypt(message.args, this.state.passphrase);
+        const { id, key } = await this.deriveKeyAndId(this.state.passphrase);
+        /**
+         * Called when the user updates the plaintext input. encrypts the text
+         * and submits it to the server
+         */
+        this.state.plaintext = message.body;
+        const encrypted = await Crypt.encryptGCM(message.body, key);
         this.state.encrypted = encrypted;
-        this.send("update", { id: this.state.id, ciphertext: encrypted });
+        this.send("update", { id, ciphertext: encrypted });
         break;
       }
       case "set-ciphertext": {
-        const ciphertext = message.args;
-        if (message.args.ciphertext) {
-          this.state.encrypted = ciphertext;
-          const { valid, plaintext } = await this.getDecrypted(ciphertext);
+        /** Server will send message via post response or websocket triggering this */
+        const { key } = await this.deriveKeyAndId(this.state.passphrase);
+        if (message.body?.ciphertext) {
+          this.state.encrypted = message.body;
+          const plaintext = await Crypt.decryptGCM(message.body, key);
           this.state.plaintext = plaintext;
-          this.state.status = valid ? "" : "HMAC Invalid";
         } else {
           this.state.plaintext = "";
-          this.state.status = "";
         }
         break;
       }
       case "connect":
+        /** Establish the websocket connection */
         this.connect();
         break;
       case "disconnect":
+        /** Close the websocket connection */
         this.disconnect();
         break;
       default:
         matched = false;
     }
-    if (matched) this.render?.(this.state.plaintext);
+
+    /** If any command was processed, trigger a re-render */
+    if (matched) this.render();
   }
 
-  private resolveId(passphrase: string): Promise<string> | string {
-    if (SecureClip.RESERVED_KEYS.includes(passphrase)) return passphrase;
-    return Crypt.deriveId(passphrase);
+  async load() {
+    const { id } = await this.deriveKeyAndId(this.state.passphrase);
+    this.send("load", { id });
   }
 
-  private async getDecrypted(data: EncryptedData): Promise<{ valid: boolean; plaintext: string }> {
-    return Crypt.decrypt(data, this.state.passphrase);
+  /** */
+  async connect(): Promise<any> {
+    /** If a socket promise already exists, return it */
+    if (this.socket) return this.socket;
+    const { res, rej, done } = hoistPromise<WebSocket>();
+    this.socket = done;
+
+    const proto = this.options.ssl ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${this.options.host}/api/ws`);
+    /**
+     * once socket is open, load & subscribe to the board and resolve the
+     * ready promise.
+     */
+    ws.onopen = async () => {
+      const { id } = await this.deriveKeyAndId(this.state.passphrase);
+      res(ws);
+      this.connected = true;
+      this.send("load", { id });
+      this.send("subscribe", { id });
+      this.onConnectionChange?.(true);
+    };
+
+    /** Add message handling */
+    ws.onmessage = (e: any) => this.handleMessage(JSON.parse(e.data) as Message);
+    ws.onclose = () => {
+      this.onConnectionChange?.(false);
+      this.socket = false;
+      this.connected = false;
+    };
+    ws.onerror = console.log;
+    return done;
   }
 
+  async disconnect() {
+    if (this.options.transport !== "socket" || !this.socket) return;
+    const socket = await this.socket;
+    socket.close();
+    this.connected = false // should also get set by close event
+    this.socket = false;
+  }
+
+  /**
+   * Wrapper around transport layer.
+   * Either sends a socket message or makes a POST request depending on how
+   * transport is setup
+   */
   private async send(command: string, body?: object) {
-    if (this.connection.type === "websocket") {
-      const ws = await this.connect();
-      if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ command, body, meta: { date: Date.now() } }));
+    debugLog("SEND", this.options.transport, command, body);
+    const { transport, host, ssl } = this.options;
+    if (transport === "socket") {
+      if (!this.socket) await this.connect();
+      if (this.socket && this.connected) {
+        (await this.socket).send(JSON.stringify({ command, body, meta: { date: Date.now() } }));
+      }
     } else {
-      const proto = this.secure ? "https" : "http";
-      const response = await fetch(`${proto}://${this.host}/api/ws`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, body, meta: { date: Date.now() } }),
-      });
-      if (response.ok && response.status !== 204) {
-        const msg = await response.json() as WsMessage;
-        if (msg?.command) this.handleMessage(msg);
+      /**
+       * Make a post request, and handle the response message the same as if
+       * it was a socket message
+       */
+      try {
+        const proto = ssl ? "https" : "http";
+        const url = `${proto}://${host}/api/`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command, body, meta: { date: Date.now() } }),
+        });
+        if (response.status === 204) return;
+        const msg = await response.json();
+        if (msg.command) this.handleMessage(msg);
+      } catch (e) {
+        console.log(e);
       }
     }
   }
 
-  private handleMessage(msg: WsMessage) {
-    if (msg.body?.id !== this.state.id) {
-      throw new Error(`id mismatch: ${msg.body.id} !== ${this.state.id}`);
-    }
+  private handleMessage(msg: Message) {
     if (msg.command === "set-plaintext") {
-      this.state.plaintext = msg.body.plaintext ?? "";
       this.state.encrypted = false;
       this.state.status = "";
-      this.render?.(this.state.plaintext);
+      this.state.plaintext = msg.body;
+      this.render();
       return;
     }
-    const raw = msg.body.ciphertext;
-    const ciphertext: EncryptedData = {
-      salt: raw?.salt ?? "",
-      sign: raw?.sign ?? "",
-      ciphertext: raw?.ciphertext ?? "",
-    };
-    this.stdin({ action: "set-ciphertext", args: ciphertext });
+    if (msg.command === "set-ciphertext") {
+      this.stdin({ command: "set-ciphertext", body: msg.body });
+    }
   }
 }
 
 export class Crypt {
-  /**
-   * Derives a deterministic channel id from the passphrase using PBKDF2
-   * with a fixed salt. Slow by design — makes passphrase brute-forcing harder.
-   */
-  static async deriveId(passphrase: string): Promise<string> {
-    if (!crypto?.subtle?.importKey) throw "Subtle crypto not available";
-    if (!crypto?.subtle?.deriveKey) throw "Subtle crypto not available";
-
+  static async expandKey(passphrase: string): Promise<string> {
+    Crypt.assertSubtleCrypto();
+    /**
+     * In this context, purpose of the salt is to prevent rainbow tables. constant salt needed for
+     * deterministic ids. Best practice would be to generate on per-host basis
+     */
     const salt = Crypt.base64toUint8Array("CDVY91c4f1n+j5M8CeJjDg==");
     const baseKey = await crypto.subtle.importKey(
       "raw",
@@ -260,106 +260,66 @@ export class Crypt {
     return Crypt.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key)));
   }
 
-  /** Encrypts using AES-CTR with a PBKDF2-derived key, signed with HMAC. */
-  static async encrypt(plaintext: string, passphrase: string): Promise<EncryptedData> {
-    if (!crypto?.subtle?.encrypt) throw "Subtle crypto not available";
-
-    const salt = Crypt.randomBytes(16);
-    const { aes, hmac } = await Crypt.deriveKeys(passphrase, salt);
-
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: "AES-CTR", counter: new Uint8Array(salt).buffer, length: 128 },
-      aes,
-      new TextEncoder().encode(plaintext),
-    );
-
-    const sign = await crypto.subtle.sign("HMAC", hmac, ciphertext);
-
-    return {
-      salt: Crypt.uint8ArrayToBase64(salt),
-      sign: Crypt.uint8ArrayToBase64(new Uint8Array(sign)),
-      ciphertext: Crypt.uint8ArrayToBase64(new Uint8Array(ciphertext)),
-    };
-  }
-
-  static async decrypt(
-    data: EncryptedData,
-    passphrase: string,
-  ): Promise<{ valid: boolean; plaintext: string }> {
-    if (!crypto?.subtle?.decrypt) throw "Subtle crypto not available";
-    const salt = Crypt.base64toUint8Array(data.salt);
-    const sign = Crypt.base64toUint8Array(data.sign);
-    const ciphertext = Crypt.base64toUint8Array(data.ciphertext);
-    const { aes, hmac } = await Crypt.deriveKeys(passphrase, salt);
-    const valid = await crypto.subtle.verify(
-      "HMAC",
-      hmac,
-      new Uint8Array(sign).buffer,
-      new Uint8Array(ciphertext).buffer,
-    );
-    const plaintext = await crypto.subtle.decrypt(
-      { name: "AES-CTR", counter: new Uint8Array(salt).buffer, length: 128 },
-      aes,
-      new Uint8Array(ciphertext).buffer,
-    );
-    return { valid, plaintext: new TextDecoder().decode(plaintext) };
+  static async sha256(input: string): Promise<string> {
+    Crypt.assertSubtleCrypto();
+    const data = new TextEncoder().encode(input);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    return Crypt.uint8ArrayToBase64(new Uint8Array(hashBuffer));
   }
 
   /**
-   * Uses PBKDF2 to derive two keys, one to be used to encrypt/decrypt using
-   * AES-CTR and one for signing and verifying data using HMAC.
+   * Encrypt supplied plaintext with AES-GCM, negating the need for additional
+   * HMAC signing
    */
-  static async deriveKeys(
-    passphrase: string | Uint8Array,
-    salt?: Uint8Array | string,
-  ): Promise<{ aes: CryptoKey; hmac: CryptoKey }> {
-    if (!crypto?.subtle?.importKey) throw "Subtle crypto not available";
-    if (!crypto?.subtle?.deriveKey) throw "Subtle crypto not available";
-    if (!salt) salt = Crypt.randomBytes(16);
-    if (typeof salt === "string") salt = Crypt.base64toUint8Array(salt);
-    if (typeof passphrase === "string") passphrase = new TextEncoder().encode(passphrase);
-
-    /** Import the raw key value submitted by the user so that PBKDF2 can be run on it */
-    const baseKey = await crypto.subtle.importKey(
+  static async encryptGCM(plaintext: string, keyString: string): Promise<Encrypted> {
+    Crypt.assertSubtleCrypto();
+    const iv = Crypt.randomBytes(12);
+    /** Convert the string based key to bytes */
+    const key = await crypto.subtle.importKey(
       "raw",
-      new Uint8Array(passphrase).buffer,
-      "PBKDF2",
+      Crypt.base64toUint8Array(keyString),
+      { name: "AES-GCM" },
       false,
-      ["deriveBits", "deriveKey"],
+      ["encrypt"],
     );
 
-    /** Derive a key to be used for encryption */
-    const key = await crypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        salt: new Uint8Array(salt).buffer,
-        iterations: 650000,
-        hash: "SHA-256",
-      },
-      baseKey,
-      { name: "AES-CTR", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      new TextEncoder().encode(plaintext),
     );
 
-    const hmac = await crypto.subtle.importKey(
+    return {
+      ciphertext: Crypt.uint8ArrayToBase64(new Uint8Array(ciphertext)),
+      iv: Crypt.uint8ArrayToBase64(iv),
+    };
+  }
+  static async decryptGCM(encrypted: Encrypted, keyString: string): Promise<string> {
+    Crypt.assertSubtleCrypto();
+    const key = await crypto.subtle.importKey(
       "raw",
-      await crypto.subtle.exportKey("raw", key) as ArrayBuffer,
-      { name: "HMAC", hash: "SHA-256" },
-      true,
-      ["sign", "verify"],
+      Crypt.base64toUint8Array(keyString),
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"],
     );
 
-    return { aes: key, hmac: hmac };
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: Crypt.base64toUint8Array(encrypted.iv) },
+      key,
+      Crypt.base64toUint8Array(encrypted.ciphertext),
+    );
+
+    return new TextDecoder().decode(plaintext);
   }
 
-  static randomBytes(bytes = 16): Uint8Array {
+  static randomBytes(bytes = 16): Uint8Array<ArrayBuffer> {
     const values = new Uint8Array(bytes);
     crypto.getRandomValues(values);
     return values;
   }
 
-  static base64toUint8Array(str?: string): Uint8Array {
+  static base64toUint8Array(str?: string): Uint8Array<ArrayBuffer> {
     if (!str) return new Uint8Array(0);
     while (str.length % 4 !== 0) str += "=";
     const outputSize = (str.length / 4) * 3 -
@@ -413,6 +373,10 @@ export class Crypt {
     else if (halfNibbles === 1) out += b64CharMap[remain] + (padding ? "=" : "");
     return out;
   }
+
+  static assertSubtleCrypto(): void {
+    if (!crypto?.subtle) throw "Subtle crypto not available";
+  }
 }
 
 export function hoistPromise<T = any>(): { res: Function; rej: Function; done: Promise<T> } {
@@ -430,4 +394,8 @@ export function sleep(ms: number) {
   const { res, done } = hoistPromise();
   setTimeout(res as () => void, ms);
   return done;
+}
+
+function debugLog(...args: unknown[]) {
+  if (DEBUG) console.log(...args);
 }

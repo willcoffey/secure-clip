@@ -2,6 +2,13 @@
 
 
 # Log
+## Mon Apr 13 10:15:27 AM EDT 2026
+Claude did a number on `core.ts` at some point, didn't notice it was making edits. Refactoring and
+reviewing the code. 
+
+ - Need to update server to always responde with valid JSON
+
+
 ## Sat Apr  4 03:24:21 PM EDT 2026
 Getting back into this repo after a while. I've been using the tool regularly 
 effectively, but there are some changes to be made and bugs to fix. Also there
