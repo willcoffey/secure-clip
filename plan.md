@@ -1,75 +1,81 @@
-# Type Unification: Message
+# Plan: update callers to render(command: string)
 
-## Goal
-
-One `Message` type shared by both client and server. Either side can send
-any command; each side handles what it knows. `ServerMessage` is deleted.
-`Message` becomes the wire protocol type and is imported by index.ts.
-
-## core.ts changes (minimal)
-
-Two changes only:
-
-1. Rename fields: `action` → `command`, `args` → `body` in the `Message`
-   union. Update the `stdin()` switch to match.
-
-2. Extend `Message` with the commands the server receives from the client
-   (currently not in the union):
-   ```ts
-   | { command: "load"; body: { id: string } }
-   | { command: "update"; body: { id: string; ciphertext: Encrypted } }
-   | { command: "subscribe"; body: { id: string } }
-   | { command: "unsubscribe"; body: { id: string } }
-   ```
-   These complete the symmetric picture. `stdin()` does not need to handle
-   them — the default/unmatched branch covers it.
-
-3. Delete the `ServerMessage` interface. It is replaced by `Message`.
+`core.ts` changed `render` from `() => void` to `(command: string) => void`.
+Two files assign `core.render` and need updating.
 
 ---
 
-## index.ts changes
+## seclip.ts
 
-### 1. Import `Message` from core.ts, remove local `Command`
+Three `core.render` assignments, all ignore the argument today.
 
+**subscribe** (line 48)
 ```ts
-import type { Message } from "../frontend/src/core.ts";
+core.render = () => { ... }
 ```
-
-Delete `interface Command { ... }` (lines 19–22). Replace every use of
-`Command` with `Message`.
-
-### 2. Update `validate()` return type
-
+Change to `(command) =>`. Only print when the command is a content update,
+not connection events:
 ```ts
-validate(data: unknown): Message | null
-```
-
-The internal cast stays structural — `validate()` checks shape, not
-variant. Callers use the discriminated union for narrowing.
-
-### 3. Update `route()` signature
-
-```ts
-async function route(
-  cmd: Message,
-  service: Service,
-  ctx: ... = ...,
-): Promise<{ data?: Message; error?: string } | null>
-```
-
-Both input and output are `Message`. The return `data` is now typed
-instead of `object`.
-
-### 4. Type `ws.send()` literals as `Message`
-
-In `restoreSubscriptions` and `webSocketMessage`, assign before
-stringifying so the compiler checks the shape:
-
-```ts
-const msg: Message = {
-  command: "set-ciphertext",
-  body: { id, ciphertext: JSON.parse(ciphertext) },
+core.render = (command) => {
+  if (command !== "set-plaintext" && command !== "set-ciphertext") return;
+  console.log(core.state.plaintext);
+  if (++count >= limit) Deno.exit(0);
 };
-ws.send(JSON.stringify(msg));
 ```
+
+**get** (line 58)
+```ts
+core.render = () => console.log(core.state.plaintext);
+```
+Transport is `post` so the only render trigger will be the load response,
+but guard anyway for consistency:
+```ts
+core.render = (command) => {
+  if (command === "set-ciphertext" || command === "set-plaintext") {
+    console.log(core.state.plaintext);
+  }
+};
+```
+
+**set** — no `render` assigned, no change needed.
+
+---
+
+## secure-clip.ts
+
+`render` is assigned in `initTextarea` (line 57):
+```ts
+this.core.render = () => {
+  textarea.value = this.core.state.plaintext;
+};
+```
+Change signature and gate textarea update on content commands.
+Connection events (`socket-open`, `socket-close`) should not overwrite
+textarea since `state.plaintext` is cleared on disconnect:
+```ts
+this.core.render = (command) => {
+  if (command === "set-plaintext" || command === "set-ciphertext") {
+    textarea.value = this.core.state.plaintext;
+  }
+};
+```
+The connection UI (globe icon, disabled state) is already handled via
+`onConnectionChange` — wait, that was removed. Connection rendering now
+comes through `render("socket-open")` / `render("socket-close")`.
+The button/field enable/disable logic that was in `onConnectionChange`
+needs to move into `render`:
+```ts
+this.core.render = (command) => {
+  if (command === "set-plaintext" || command === "set-ciphertext") {
+    textarea.value = this.core.state.plaintext;
+  } else if (command === "socket-open" || command === "socket-close") {
+    const connected = this.core.state.connected;
+    passphraseConnect.classList.toggle("connected", connected);
+    passphraseConnect.classList.toggle("disconnected", !connected);
+    passphraseConnect.innerHTML = connected ? globe : globeOff;
+    passphraseField.disabled = !connected;
+    textarea.disabled = !connected;
+  }
+};
+```
+And remove the `onConnectionChange` assignment block (lines 121–127).
