@@ -2,6 +2,16 @@
 
 
 # Log
+## Wed Apr 22 01:14:02 PM EDT 2026
+Updated server to not invoke a handler if the message that triggered the pub came from said handler.
+Should eventually update to send a different message, but server needs a refactor first.
+
+Something to flag for future security review. the stdin interface a server message handling is 
+dangerous for allowing the server to `set-plaintext`, `set-passphrase` etc. It doesn't completely
+expose the passphrase, but it lets the server encrypt known plaintext with the passphrase and
+set the passphrase which the user may not notice.
+
+
 ## Mon Apr 13 10:15:27 AM EDT 2026
 Claude did a number on `core.ts` at some point, didn't notice it was making edits. Refactoring and
 reviewing the code. 

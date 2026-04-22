@@ -1,6 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { Handler, Service } from "./Service";
-interface Encrypted { iv: string; ciphertext: string }
+interface Encrypted {
+  iv: string;
+  ciphertext: string;
+}
 type Message =
   | { command: "set-passphrase"; body: string }
   | { command: "set-plaintext"; body: string }
@@ -32,6 +35,7 @@ async function route(
   cmd: Command,
   service: Service,
   ctx: { wsConnections: number; idHandlers: number } = { wsConnections: 0, idHandlers: 0 },
+  sender?: unknown,
 ): Promise<{ data?: Message; error?: string } | null> {
   switch (cmd.command) {
     case "load": {
@@ -45,9 +49,13 @@ async function route(
       return { data: { command: "set-ciphertext", body: raw ? JSON.parse(raw) : null } };
     }
     case "update": {
-      if (['system-stats', 'system-help'].indexOf(cmd.body.id) !== -1) return {};
+      if (["system-stats", "system-help"].indexOf(cmd.body.id) !== -1) return {};
       try {
-        await service.update({ id: cmd.body.id, ciphertext: JSON.stringify(cmd.body.ciphertext) });
+        await service.update({
+          id: cmd.body.id,
+          ciphertext: JSON.stringify(cmd.body.ciphertext),
+          sender,
+        });
         return {};
       } catch (e: any) {
         return { data: e.toString() };
@@ -78,7 +86,7 @@ export class PlatformConnector extends DurableObject {
     this.service = new Service(ctx.storage.sql);
   }
 
-  validate(data: unknown): Command | null {
+  static parseCommand(data: unknown): Command | null {
     if (typeof data !== "object" || !data) return null;
     const { command, body } = data as Record<string, unknown>;
     if (typeof command !== "string") return null;
@@ -92,7 +100,7 @@ export class PlatformConnector extends DurableObject {
       this.ctx.acceptWebSocket(pair[1]);
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
-    const cmd = this.validate(await request.json().catch(() => null));
+    const cmd = PlatformConnector.parseCommand(await request.json().catch(() => null));
     if (!cmd) return new Response("Bad Request", { status: 400 });
     // Restore subscriptions before routing — 'update' triggers notification
     // handlers, and the DO may have woken from hibernation for this request.
@@ -115,8 +123,14 @@ export class PlatformConnector extends DurableObject {
     if (ids.length === 0) return;
     const entries: Array<{ id: string; handler: Handler }> = [];
     for (const id of ids) {
-      const handler: Handler = ({ id, ciphertext }) => {
-        ws.send(JSON.stringify({ command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message));
+      const handler: Handler = ({ id, ciphertext, sender }) => {
+        if (sender !== ws) {
+          ws.send(
+            JSON.stringify(
+              { command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message,
+            ),
+          );
+        }
       };
       entries.push({ id, handler });
       this.service.subscribe({ id, handler });
@@ -138,13 +152,17 @@ export class PlatformConnector extends DurableObject {
   async webSocketMessage(ws: WebSocket, message: string) {
     // Restore subscriptions if this is a fresh DO instance (post-hibernation).
     this.restoreAllSubscriptions();
-
-    const cmd = this.validate(JSON.parse(message));
+    const cmd = PlatformConnector.parseCommand(JSON.parse(message));
     if (!cmd) return;
 
     if (cmd.command === "subscribe") {
-      const handler: Handler = ({ id, ciphertext }) => {
-        ws.send(JSON.stringify({ command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message));
+      const handler: Handler = ({ id, ciphertext, sender }) => {
+        if (sender === ws) return;
+        ws.send(
+          JSON.stringify(
+            { command: "set-ciphertext", body: JSON.parse(ciphertext) } satisfies Message,
+          ),
+        );
       };
       const entries = this.wsHandlers.get(ws) ?? [];
       entries.push({ id: cmd.body.id, handler });
@@ -171,7 +189,7 @@ export class PlatformConnector extends DurableObject {
       wsConnections: this.wsHandlers.size,
       idHandlers: [...this.wsHandlers.values()].reduce((n, arr) => n + arr.length, 0),
     };
-    const result = await route(cmd, this.service, ctx);
+    const result = await route(cmd, this.service, ctx, ws);
     if (!result) return;
     if (result.data) ws.send(JSON.stringify(result.data));
     else if (result.error) ws.send(JSON.stringify({ error: result.error }));
@@ -190,6 +208,7 @@ export class PlatformConnector extends DurableObject {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    await sleep(50);
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       const stub = env.CLIP_ROOM.get(env.CLIP_ROOM.idFromName("global"));
@@ -201,3 +220,9 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+function sleep(ms: number) {
+  return new Promise((res) => {
+    setTimeout(res, ms);
+  });
+}

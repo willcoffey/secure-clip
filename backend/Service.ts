@@ -1,4 +1,4 @@
-export type Handler = (args: { id: string; ciphertext: string }) => void;
+export type Handler = (args: { id: string; ciphertext: string; sender?: unknown }) => void;
 
 const STORAGE_LIMIT = 100 * 1024 * 1024; // 100 MB
 
@@ -13,11 +13,13 @@ export class Service {
         last_accessed INTEGER NOT NULL DEFAULT 0
       )
     `);
-    try { sql.exec(`ALTER TABLE clips ADD COLUMN last_accessed INTEGER NOT NULL DEFAULT 0`); } catch {}
+    try {
+      sql.exec(`ALTER TABLE clips ADD COLUMN last_accessed INTEGER NOT NULL DEFAULT 0`);
+    } catch {}
     sql.exec(`CREATE INDEX IF NOT EXISTS clips_by_accessed ON clips (last_accessed DESC)`);
   }
 
-  async update({ id, ciphertext }: { id: string; ciphertext: string }) {
+  async update({ id, ciphertext, sender }: { id: string; ciphertext: string; sender?: unknown }) {
     if (ciphertext.length >= 131072) throw new Error("too large");
     this.sql.exec(
       `INSERT INTO clips (id, ciphertext, last_accessed) VALUES (?, ?, unixepoch())
@@ -27,7 +29,7 @@ export class Service {
     );
     this.cleanup();
     for (const handler of this.handlers.get(id) ?? []) {
-      handler({ id, ciphertext });
+      handler({ id, ciphertext, sender });
     }
   }
 
@@ -50,7 +52,9 @@ export class Service {
     return rows[0]?.ciphertext ?? null;
   }
 
-  systemStats({ wsConnections, idHandlers }: { wsConnections: number; idHandlers: number }): string {
+  systemStats(
+    { wsConnections, idHandlers }: { wsConnections: number; idHandlers: number },
+  ): string {
     const [{ total, count }] = this.sql.exec<{ total: number; count: number }>(
       `SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) as total, COUNT(*) as count FROM clips`,
     ).toArray();
