@@ -14,11 +14,14 @@ import encodeQR from "qr";
 import { Crypt, SecureClip } from "./core";
 
 class SecureClipElement extends HTMLElement {
-  core = new SecureClip({
-    host: location.host,
-    ssl: location.protocol === "https:",
-    transport: "socket",
-  }, localStorage.getItem("sc:passphrase") ?? "swordfish");
+  core = new SecureClip(
+    {
+      host: location.host,
+      ssl: location.protocol === "https:",
+      transport: "socket",
+    },
+    localStorage.getItem("sc:passphrase") ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
+  );
   shadow?: ShadowRoot;
 
   randomizePassphrase(field: HTMLInputElement) {

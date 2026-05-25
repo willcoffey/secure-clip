@@ -1,6 +1,5 @@
 {
   "imports": {
-    "utilities": "file:///Users/developer/repos/utilities/index.ts",
     "@std/assert": "jsr:@std/assert@^1"
   }
 }

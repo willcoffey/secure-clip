@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "scripts": {
     "check": "tsc -p frontend/tsconfig.json --watch & tsc -p backend/tsconfig.json --watch",
     "build": "vite build frontend --watch",
