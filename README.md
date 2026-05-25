@@ -1,12 +1,12 @@
 # Summary
 *secure-clip* is a front and backend for an end-to-end encrypted clipboard utility. There is a deno
 terminal utility `seclip.ts`, and a progressive web app front end. It uses symmetric key encryption,
-AES, with QR codes as a convenient way to share keys locally.
+AES-GCM, with QR codes as a convenient way to share keys locally.
 
 This project started as a means to learn Claude code and Cloudflare workers, but has become a tool
 that I use every day. It's designed to be self-hostable for free as a Cloudflare Durable Worker.
 
-`core.ts` contains minimal client + encryption logc. Can be tested in isolation to verify security.
+`core.ts` contains minimal client + encryption logic. Can be tested in isolation to verify security.
 
 # Usage
 ## VIM

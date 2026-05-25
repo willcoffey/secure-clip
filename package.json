@@ -3,7 +3,8 @@
     "check": "tsc -p frontend/tsconfig.json --watch & tsc -p backend/tsconfig.json --watch",
     "build": "vite build frontend --watch",
     "worker": "wrangler dev --config backend/wrangler.toml --port 3000 --ip 0.0.0.0",
-    "deploy": "vite build frontend && wrangler deploy --config backend/wrangler.toml"
+    "deploy": "vite build frontend && wrangler deploy --config backend/wrangler.toml",
+    "test": "deno test --allow-net=localhost:3000"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
