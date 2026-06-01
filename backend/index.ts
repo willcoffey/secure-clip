@@ -14,7 +14,7 @@ type Message =
 const HELP_TEXT = `secure-clip: encrypted shared clipboard
 
   type a passphrase to open a board
-  boards are end-to-end encrypted with AES-CTR + HMAC
+  boards are end-to-end encrypted with AES-GCM
   the server stores only ciphertext and never sees your passphrase
 
 special boards:
@@ -39,10 +39,14 @@ async function route(
 ): Promise<{ data?: Message; error?: string } | null> {
   switch (cmd.command) {
     case "load": {
-      if (cmd.body.id === "system-stats") {
+
+
+      /** Hardcoded value for 'system-stats' after PBKDF2 */
+      if (cmd.body.id === "19QMaI/tgJRLXttrbjn+tsXAdCg+cwzjtvqUOotgi3k=") {
         return { data: { command: "set-plaintext", body: service.systemStats(ctx) } };
       }
-      if (cmd.body.id === "system-help") {
+      /** Hardcoded value for 'system-help' after PBKDF2 */
+      if (cmd.body.id === "XxNGVedDm/znlrf2GsMnom1aYuhCfKsf9BK51HiExcc=") {
         return { data: { command: "set-plaintext", body: HELP_TEXT } };
       }
       const raw = await service.load({ id: cmd.body.id });
@@ -208,7 +212,6 @@ export class PlatformConnector extends DurableObject {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    await sleep(50);
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       const stub = env.CLIP_ROOM.get(env.CLIP_ROOM.idFromName("global"));

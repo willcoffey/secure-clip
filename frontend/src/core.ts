@@ -154,11 +154,6 @@ export class SecureClip {
     return expanded;
   }
 
-  private async load() {
-    const { id } = await this.deriveKeyAndId(this.state.passphrase);
-    this.send("load", { id });
-  }
-
   private async connect(): Promise<any> {
     /** If a socket promise already exists, return it */
     if (this.socket) return this.socket;

@@ -7,8 +7,7 @@
     "noEmit": true,
     "lib": ["ESNext", "DOM"],
     "allowImportingTsExtensions": true,
-    "types": ["vite/client"]
+    "types": ["node", "vite/client"]
   },
-  "include": ["src"],
-  "exclude": ["src/seclip.ts"]
+  "include": ["src"]
 }

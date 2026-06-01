@@ -22,6 +22,7 @@
     "packageJson": {
       "dependencies": [
         "npm:@cloudflare/workers-types@^4.20260305.0",
+        "npm:@types/node@^25.9.1",
         "npm:lucide-static@0.576",
         "npm:qr@~0.5.4",
         "npm:typescript@^5.8.3",

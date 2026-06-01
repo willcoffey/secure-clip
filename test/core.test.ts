@@ -13,8 +13,6 @@ const settings = {
   },
 };
 
-/* */
-
 /**
  * Sets the passphrase to known value and stores the ciphertext on the server.
  * sleeps since it's fire-and-forget

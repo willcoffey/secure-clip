@@ -4,7 +4,7 @@ import { SecureClip } from "./core.ts";
 const D = (globalThis as any).Deno;
 const argv: string[] = D ? D.args : process.argv.slice(2);
 const getEnv = (k: string): string | undefined => (D ? D.env.get(k) : process.env[k]);
-const exit = (code: number): never => (D ? D.exit(code) : process.exit(code));
+const exit = (code: number): never => (D ? D.exit(code) : process.exit(code)) as never;
 const stdin = D ? D.stdin.readable : process.stdin;
 
 async function main() {
@@ -56,7 +56,7 @@ Examples:
             console.log(core.state.plaintext);
             if (++count >= limit) exit(0);
           };
-          await core.connect();
+          await core.stdin({ command: "connect" });
         }
         break;
       case "get":
@@ -67,7 +67,8 @@ Examples:
               console.log(core.state.plaintext);
             }
           };
-          await core.load();
+          // set-passphrase derives the id and fires a load over POST
+          await core.stdin({ command: "set-passphrase", body: passphrase });
         }
         break;
       case "set":

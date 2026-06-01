@@ -3,9 +3,9 @@
 terminal utility `seclip.ts`, and a progressive web app front end. It uses symmetric key encryption,
 AES-GCM, with QR codes as a convenient way to share keys.
 
-This project started as a means to learn Claude code and Cloudflare workers, but has become a tool
+This project started as a means to learn Claude Code and Cloudflare Workers, but has become a tool
 that I use daily. It's designed to be self-hostable for free as a Cloudflare Durable Worker. I use
-it for
+it for:
  
  - copying text from a machine using `cat foo.txt | seclip --passphrase swordfish -d URL`
  - keybindings in `vim` to copy the selected text, or paste from the `seclip`.
@@ -129,11 +129,11 @@ that matches.
 Currently the timestamp is not part of the ciphertext, a malicious server could record 
 encrypted messages and send them out of order.
 
-Passphrase is stored in local storage - necessary for viewing and Remembering the passphrase
+Passphrase is stored in local storage - necessary for viewing and remembering the passphrase
 
 The system is built to be agnostic as to where commands come from. Remote server or user. This can
 lead to a malicious server being able to use the clients browser as an encryption oracle, and 
-AES-GCM is vulnarable to nonce repeat. With 96 bit nonce I don't think it's an issue with network
+AES-GCM is vulnerable to nonce repeat. With 96 bit nonce I don't think it's an issue with network
 latency but it should eventually be addressed. AES-GCM-SIV is not in web crypto.
 
 
