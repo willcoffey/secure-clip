@@ -6,7 +6,9 @@ const SALT = "CDVY91c4f1n+j5M8CeJjDg==";
 //deno-fmt-ignore
 const B64_REVERSE = new Uint8Array(128);
 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-  .split("").forEach((c, i) => { B64_REVERSE[c.charCodeAt(0)] = i; });
+  .split("").forEach((c, i) => {
+    B64_REVERSE[c.charCodeAt(0)] = i;
+  });
 
 /**
  * API is transport agnostic, but sockets are needed for the server to send updates to client
@@ -23,7 +25,14 @@ export type Message =
   | { command: "set-plaintext"; body: string }
   | { command: "set-ciphertext"; body: Encrypted | null }
   | { command: "connect" }
-  | { command: "disconnect" };
+  | { command: "disconnect" }
+  | { command: "error"; body: string };
+
+export function assertMessage(x: unknown): asserts x is Message {
+  if (typeof x !== "object" || x === null) throw new Error("not an object");
+  if ("command" in x && typeof x.command === "string") return;
+  throw new Error("missing command");
+}
 
 // Encrypted value stored on server, id is SHA256(PBKDF2(passphrase, salt))
 export interface Encrypted {
@@ -36,6 +45,7 @@ export interface State {
   plaintext: string;
   encrypted: Encrypted | false;
   connected: boolean;
+  error: string | null;
 }
 
 export interface SecureClipOptions {
@@ -70,6 +80,7 @@ export class SecureClip {
       plaintext: "",
       encrypted: false,
       connected: false,
+      error: null,
     };
   }
 
@@ -90,6 +101,7 @@ export class SecureClip {
   async stdin(message: Message) {
     debugLog("STDIN", message);
     const { transport } = this.options;
+    this.state.error = null;
 
     switch (message.command) {
       case "set-passphrase": {
@@ -137,6 +149,9 @@ export class SecureClip {
         /** Close the websocket connection */
         this.disconnect();
         break;
+      case "error":
+        this.state.error = message.body;
+        break;
     }
 
     /** render based on what command triggered state change */
@@ -176,7 +191,9 @@ export class SecureClip {
     };
 
     /** Add message handling */
-    ws.onmessage = (e: any) => this.handleMessage(JSON.parse(e.data) as Message);
+    ws.onmessage = (e: MessageEvent<string>) => {
+      this.handleMessage(e.data);
+    };
     ws.onclose = () => {
       this.socket = false;
       this.state.connected = false;
@@ -221,23 +238,24 @@ export class SecureClip {
           body: JSON.stringify({ command, body, meta: { date: Date.now() } }),
         });
         if (response.status === 204) return;
-        const msg = await response.json();
-        if (msg.command) this.handleMessage(msg);
+        this.handleMessage(await response.text());
       } catch (e) {
         console.log(e);
       }
     }
   }
 
-  private handleMessage(msg: Message) {
-    if (msg.command === "set-plaintext") {
-      this.state.encrypted = false;
-      this.state.plaintext = msg.body;
-      this.render("set-plaintext");
-      return;
-    }
-    if (msg.command === "set-ciphertext") {
-      this.stdin({ command: "set-ciphertext", body: msg.body });
+  /**
+   * Takes the raw text from the fetch response or websocket message, validates it and either sends
+   * message to stdin, or creates an error command and sends that
+   */
+  private handleMessage(text: string) {
+    try {
+      const msg = JSON.parse(text);
+      assertMessage(msg);
+      this.stdin(msg);
+    } catch (e) {
+      this.stdin({ command: "error", body: "[client] Invalid message from server" });
     }
   }
 }
@@ -379,7 +397,8 @@ export class Crypt {
 
     for (let i = 0; i < str.length; i += 4) {
       const arrIndex = (i / 4) * 3;
-      arr[arrIndex] = (B64_REVERSE[str.charCodeAt(i)] << 2) | (B64_REVERSE[str.charCodeAt(i + 1)] >> 4);
+      arr[arrIndex] = (B64_REVERSE[str.charCodeAt(i)] << 2) |
+        (B64_REVERSE[str.charCodeAt(i + 1)] >> 4);
       if (arr.length > arrIndex + 1) {
         arr[arrIndex + 1] = ((B64_REVERSE[str.charCodeAt(i + 1)] & 0b00001111) << 4) |
           (B64_REVERSE[str.charCodeAt(i + 2)] >> 2);

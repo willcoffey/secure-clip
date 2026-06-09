@@ -9,7 +9,8 @@ type Message =
   | { command: "set-plaintext"; body: string }
   | { command: "set-ciphertext"; body: Encrypted | null }
   | { command: "connect" }
-  | { command: "disconnect" };
+  | { command: "disconnect" }
+  | { command: "error"; body: string };
 
 const HELP_TEXT = `secure-clip: encrypted shared clipboard
 
@@ -36,11 +37,9 @@ async function route(
   service: Service,
   ctx: { wsConnections: number; idHandlers: number } = { wsConnections: 0, idHandlers: 0 },
   sender?: unknown,
-): Promise<{ data?: Message; error?: string } | null> {
+): Promise<{ data?: Message } | null> {
   switch (cmd.command) {
     case "load": {
-
-
       /** Hardcoded value for 'system-stats' after PBKDF2 */
       if (cmd.body.id === "19QMaI/tgJRLXttrbjn+tsXAdCg+cwzjtvqUOotgi3k=") {
         return { data: { command: "set-plaintext", body: service.systemStats(ctx) } };
@@ -53,7 +52,12 @@ async function route(
       return { data: { command: "set-ciphertext", body: raw ? JSON.parse(raw) : null } };
     }
     case "update": {
-      if (["system-stats", "system-help"].indexOf(cmd.body.id) !== -1) return {};
+      if (
+        [
+          "19QMaI/tgJRLXttrbjn+tsXAdCg+cwzjtvqUOotgi3k=",
+          "XxNGVedDm/znlrf2GsMnom1aYuhCfKsf9BK51HiExcc=",
+        ].indexOf(cmd.body.id) !== -1
+      ) return {};
       try {
         await service.update({
           id: cmd.body.id,
@@ -62,7 +66,7 @@ async function route(
         });
         return {};
       } catch (e: any) {
-        return { data: e.toString() };
+        return { data: { command: "error", body: e.toString() } };
       }
     }
   }
@@ -111,7 +115,6 @@ export class PlatformConnector extends DurableObject {
     this.restoreAllSubscriptions();
     const result = await route(cmd, this.service);
     if (!result) return new Response("Unknown command", { status: 400 });
-    if (result.error) return Response.json({ error: result.error }, { status: 400 });
     if (result.data) return Response.json(result.data);
     return new Response(null, { status: 204 });
   }
@@ -196,7 +199,6 @@ export class PlatformConnector extends DurableObject {
     const result = await route(cmd, this.service, ctx, ws);
     if (!result) return;
     if (result.data) ws.send(JSON.stringify(result.data));
-    else if (result.error) ws.send(JSON.stringify({ error: result.error }));
   }
 
   async webSocketClose(ws: WebSocket) {

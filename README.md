@@ -7,7 +7,7 @@ This project started as a means to learn Claude Code and Cloudflare Workers, but
 that I use daily. It's designed to be self-hostable for free as a Cloudflare Durable Worker. I use
 it for:
  
- - copying text from a machine using `cat foo.txt | seclip --passphrase swordfish -d URL`
+ - copying text from a machine using `cat foo.txt | seclip set --passphrase swordfish -d URL`
  - keybindings in `vim` to copy the selected text, or paste from the `seclip`.
  - simple shopping lists or task lists made on laptop to be accessible on phone without overhead.
 
@@ -33,14 +33,20 @@ node frontend/src/seclip.ts -h
 # Usage
 ## Terminal
 Help can be shown via `seclip -h`, to read data in a specific clipboard run 
-`seclip -d URL --passphrase PASSPHRASE`. The passphrase can be omitted if the `SECLIP_PASSPHRASE`
+`seclip get -d URL --passphrase PASSPHRASE`. The passphrase can be omitted if the `SECLIP_PASSPHRASE`
 env variable is set.
 
 To set the contents of a board text can be piped to it via `echo "hello" | seclip set -d URL 
---passphrase PASSPHRASE`. For ease of use an alias can be added to `.zshrc` or other relevant
-file.
+--passphrase PASSPHRASE`. For ease of use I add the two aliases and the env variable to my 
+to my `.bashrc`
+```
+export SECLIP_PASSPHRASE="swordfish"
+alias setclip='seclip -d secure-clip.wilcof.workers.dev set'
+alias getclip='seclip -d secure-clip.wilcof.workers.dev get'
+```
 
-A board can also be subscribed to, so that the output is displayed whenever the contents change. 
+In addition to one off reads, a board can be subscribed to receive updates whenever that board 
+changes.
 `seclip subscribe -d URL --passphrase PASSPHRASE`.
 
 
