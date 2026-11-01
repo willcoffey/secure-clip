@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": ["Edit(**)", "Edit(!*/)", "Edit(!*.ai.*)"]
+  },
+  "env": { "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1" },
+  "enableArtifact": false,
+  "disableClaudeAiConnectors": true,
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": { "denyWrite": ["./"] }
+  }
+}
