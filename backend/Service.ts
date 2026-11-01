@@ -39,7 +39,9 @@ export class Service {
         `SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) as total FROM clips`,
       ).toArray();
       if (total <= STORAGE_LIMIT) break;
-      this.sql.exec(`DELETE FROM clips WHERE rowid = (SELECT MIN(rowid) FROM clips)`);
+      this.sql.exec(
+        `DELETE FROM clips WHERE id = (SELECT id FROM clips ORDER BY last_accessed ASC LIMIT 1)`,
+      );
     }
   }
 
