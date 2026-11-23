@@ -3,6 +3,7 @@ import css from "./secure-clip.css?raw";
 
 /** Components **/
 import "./components/qr-code/qr-code.ai";
+import "./components/sandboxed-markdown/sandboxed-markdown.ai";
 
 /** SVG Icons */
 import eyeOn from "lucide-static/icons/eye.svg?raw";
@@ -12,6 +13,7 @@ import circleHelp from "lucide-static/icons/circle-question-mark.svg?raw";
 import dices from "lucide-static/icons/dices.svg?raw";
 import globe from "lucide-static/icons/globe.svg?raw";
 import globeOff from "lucide-static/icons/globe-off.svg?raw";
+import fileText from "lucide-static/icons/file-text.svg?raw";
 
 import { Crypt, SecureClip } from "./core";
 
@@ -38,7 +40,7 @@ class SecureClipElement extends HTMLElement {
 
     /**
      * Update the passphrase only after change, not every keystroke. so as not
-     * to leak hash of 'p' then 'pa', 'pas', 'pass' and so forth. Making it 
+     * to leak hash of 'p' then 'pa', 'pas', 'pass' and so forth. Making it
      * easy to crack
      */
     field.addEventListener("change", () => {
@@ -51,6 +53,17 @@ class SecureClipElement extends HTMLElement {
 
     qr.innerHTML = qrCode;
     qr.addEventListener("click", () => this.shadow!.querySelector("qr-code")!.show(field.value));
+
+    /**
+     * Listen for events from qr-code scanning
+     */
+    this.shadow!.querySelector("qr-code")!.addEventListener("scan", (e) => {
+      const passphrase = (e as CustomEvent<string>).detail;
+      field.value = passphrase;
+      localStorage.setItem("sc:passphrase", passphrase);
+      this.core.stdin({ command: "set-passphrase", body: passphrase });
+    });
+
     help.innerHTML = circleHelp;
     help.addEventListener("click", () => {
       field.value = "system-help";
@@ -107,6 +120,8 @@ class SecureClipElement extends HTMLElement {
     const passphraseConnect = this.shadow.getElementById("passphrase-connect") as HTMLButtonElement;
     const toggle = this.shadow.getElementById("passphrase-toggle") as HTMLButtonElement;
     const textarea = this.shadow.getElementById("text-field") as HTMLTextAreaElement;
+    const markdownToggle = this.shadow.getElementById("markdown-toggle") as HTMLButtonElement;
+    const markdownView = this.shadow.querySelector("sandboxed-markdown")!;
 
     toggle.innerHTML = eyeOn;
     passphraseDice.innerHTML = dices;
@@ -122,9 +137,29 @@ class SecureClipElement extends HTMLElement {
     this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
     this.initHideShowIcon(passphraseField, toggle);
     this.initTextarea(textarea);
+
+    /** Initialize the mardkown button */
+    markdownToggle.innerHTML = fileText;
+    const setMarkdown = (show: boolean) => {
+      if (show) markdownView.markdown = textarea.value;
+      markdownView.hidden = !show;
+      textarea.hidden = show;
+      markdownToggle.setAttribute("aria-pressed", String(show));
+      markdownToggle.setAttribute(
+        "aria-label",
+        show ? "Hide rendered markdown" : "Show rendered markdown",
+      );
+    };
+    markdownToggle.addEventListener("click", () => {
+      setMarkdown(markdownToggle.getAttribute("aria-pressed") !== "true");
+    });
+
     this.core.render = (command) => {
       if (command === "set-plaintext" || command === "set-ciphertext") {
         textarea.value = this.core.state.plaintext;
+        if (!markdownView.hidden) markdownView.markdown = this.core.state.plaintext;
+      } else if (command === "set-passphrase") {
+        setMarkdown(false);
       } else if (command === "socket-open" || command === "socket-close") {
         const connected = this.core.state.connected;
         passphraseConnect.classList.toggle("connected", connected);

@@ -1,0 +1,22 @@
+{
+  "name": "my-marked",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsc --watch --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "highlight.js": "^11.12.0",
+    "marked": "^17.0.6",
+    "marked-footnote": "^1.4.0",
+    "marked-highlight": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  },
+  "bin": {
+    "my-marked": "src/cli.ts"
+  }
+}

@@ -1,4 +1,5 @@
 import { SecureClip } from "./core.ts";
+import encodeQR from "qr";
 
 /** Runtime shim so this runs under both Deno and Node. */
 const D = (globalThis as any).Deno;
@@ -16,7 +17,7 @@ async function main() {
 
   if (opts.flags.h || opts.flags.help) {
     console.log(`Secure clipboard CLI.
-Usage: seclip [OPTIONS] get|set|subscribe
+Usage: seclip [OPTIONS] get|set|subscribe|qr
 
   -h, --help              Print help
   -d [HOST]               Host (default: 127.0.0.1:3000)
@@ -37,8 +38,8 @@ Examples:
   if (!passphrase) throw "ERR: No passphrase. Use --passphrase or set SECLIP_PASSPHRASE";
 
   const command = opts.operands[0];
-  if (command !== "get" && command !== "set" && command !== "subscribe") {
-    console.error("ERR: command must be get, set, or subscribe");
+  if (command !== "get" && command !== "set" && command !== "subscribe" && command !== "qr") {
+    console.error("ERR: command must be get, set, subscribe, or qr");
     exit(1);
   }
   const ssl = opts.flags.nossl ? false : true;
@@ -46,6 +47,9 @@ Examples:
 
   try {
     switch (command) {
+      case "qr":
+        console.log(encodeQR(passphrase, "term"));
+        break;
       case "subscribe":
         {
           const core = new SecureClip({ host, ssl, transport: "socket" }, passphrase);

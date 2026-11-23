@@ -1,0 +1,16 @@
+:host {
+  display: block;
+}
+
+/* :host's display would otherwise override the hidden attribute */
+:host([hidden]) {
+  display: none;
+}
+
+#frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg, #272822);
+}

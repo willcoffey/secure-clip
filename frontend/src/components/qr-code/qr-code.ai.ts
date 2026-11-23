@@ -2,7 +2,7 @@ import html from "./qr-code.ai.html?raw";
 import css from "./qr-code.ai.css?raw";
 
 import encodeQR from "qr";
-import { frameLoop, frontalCamera, QRCanvas } from "qr/dom.js";
+import { frameLoop, QRCanvas, rearCamera } from "qr/dom.js";
 
 type Mode = "show" | "scan";
 
@@ -79,9 +79,9 @@ export class QrCodeElement extends HTMLElement {
     const video = document.createElement("video");
     popover.replaceChildren(video);
 
-    let camera: Awaited<ReturnType<typeof frontalCamera>>;
+    let camera: Awaited<ReturnType<typeof rearCamera>>;
     try {
-      camera = await frontalCamera(video);
+      camera = await rearCamera(video);
     } catch (e) {
       if (token !== this.scanToken) return;
       const msg = document.createElement("p");
@@ -98,15 +98,30 @@ export class QrCodeElement extends HTMLElement {
     }
 
     const canvas = new QRCanvas();
-    const cancelLoop = frameLoop(() => {
-      // Wait until the video has a frame to decode.
-      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-      // fullSize: the default squashes the whole frame into the (square)
-      // element's size, distorting the code; decode at native resolution.
-      const result = camera.readFrame(canvas, true);
-      if (result === undefined) return;
+    let reading = false;
+    const cancelLoop = frameLoop(async () => {
+      // Wait until the video has a frame, and for the previous read to finish.
+      if (reading || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      reading = true;
+      let result;
+      try {
+        // fullSize: the default squashes the whole frame into the (square)
+        // element's size, distorting the code; decode at native resolution.
+        result = await camera.readFrame(canvas, true);
+      } catch {
+        return; // A failed frame just means no code yet; try the next one.
+      } finally {
+        reading = false;
+      }
+      // Stopped (closed / switched mode) while this frame was decoding.
+      if (token !== this.scanToken) return;
+      // Result is a string, or one entry per detected code (string or Error).
+      const text = typeof result === "string"
+        ? result
+        : result?.find((r): r is string => typeof r === "string");
+      if (text === undefined) return;
       this.hide();
-      this.dispatchEvent(new CustomEvent<string>("scan", { detail: result }));
+      this.dispatchEvent(new CustomEvent<string>("scan", { detail: text }));
     });
     this.stopScan = () => {
       cancelLoop();

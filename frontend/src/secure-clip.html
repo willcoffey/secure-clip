@@ -11,11 +11,13 @@
         </button>
         <button id="passphrase-dice" type="button" aria-label="Randomize passphrase"></button>
         <button id="passphrase-qr" type="button" aria-label="Scan QR code"></button>
+        <button id="markdown-toggle" type="button" aria-label="Show rendered markdown" aria-pressed="false"></button>
         <button id="passphrase-connect" type="button" aria-label="Connection status"></button>
         <button id="passphrase-help" type="button" aria-label="Help"></button>
       </div>
   </div>
   <div id="text-wrap">
+    <sandboxed-markdown id="markdown-view" hidden></sandboxed-markdown>
     <textarea spellcheck="false" id="text-field" aria-label="Clipboard text"></textarea>
   </div>
 </div>

@@ -93,6 +93,7 @@ input {
 #passphrase-dice,
 #passphrase-qr,
 #passphrase-connect,
+#markdown-toggle,
 #passphrase-help {
   background: var(--bg-sub);
   color: var(--fg-dim);
@@ -108,6 +109,7 @@ input {
 #passphrase-dice:hover,
 #passphrase-qr:hover,
 #passphrase-connect:hover,
+#markdown-toggle:hover,
 #passphrase-help:hover {
   color: var(--fg);
   border-color: var(--accent);
@@ -121,11 +123,15 @@ input {
 #passphrase-connect.disconnected {
   color: #f92672;
 }
+#markdown-toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
 
 #passphrase-toggle svg,
 #passphrase-dice svg,
 #passphrase-qr svg,
 #passphrase-connect svg,
+#markdown-toggle svg,
 #passphrase-help svg {
   width: 2em;
   height: 2em;
@@ -139,5 +145,11 @@ input {
   width: 100%;
   height: 100%;
   resize: none;
+  box-sizing: border-box;
+}
+#markdown-view {
+  width: 100%;
+  height: 100%;
+  border: 1px solid transparent;
   box-sizing: border-box;
 }

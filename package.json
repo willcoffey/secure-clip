@@ -1,5 +1,6 @@
 {
   "type": "module",
+  "workspaces": ["frontend/src/lib/my-marked"],
   "scripts": {
     "check": "tsc -p frontend/tsconfig.json --watch & tsc -p backend/tsconfig.json --watch",
     "build": "vite build frontend --watch",
@@ -16,6 +17,6 @@
   },
   "dependencies": {
     "lucide-static": "^0.576.0",
-    "qr": "^0.5.4"
+    "qr": "^0.7.2"
   }
 }
