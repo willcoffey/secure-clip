@@ -33,9 +33,18 @@ class SecureClipElement extends HTMLElement {
 
   initPassphraseField(field: HTMLInputElement, qr: HTMLButtonElement, help: HTMLButtonElement) {
     field.value = this.core.state.passphrase;
-    field.addEventListener("input", () => {
+
+    /**
+     * Update the passphrase only after change, not every keystroke. so as not
+     * to leak hash of 'p' then 'pa', 'pas', 'pass' and so forth. Making it 
+     * easy to crack
+     */
+    field.addEventListener("change", () => {
       localStorage.setItem("sc:passphrase", field.value);
       this.core.stdin({ command: "set-passphrase", body: field.value });
+    });
+    field.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") field.blur();
     });
     qr.innerHTML = qrCode;
     qr.addEventListener("click", () => this.showQrPopover(field.value));
