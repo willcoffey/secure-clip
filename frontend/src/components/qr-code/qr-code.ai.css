@@ -1,0 +1,76 @@
+#backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+#backdrop[hidden] {
+  display: none;
+}
+
+#panel {
+  display: flex;
+  flex-direction: column;
+}
+
+#actions {
+  display: flex;
+  background: #d6d1b0;
+  border-top: 1px solid #b8b28e;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+#actions button {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  color: #6b6650;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#actions button + button {
+  border-left: 1px solid #b8b28e;
+}
+
+#actions button[aria-pressed="true"] {
+  background: #c9c39f;
+  color: #272822;
+}
+
+#popover {
+  background: #e8e4c8;
+  border-radius: 8px 8px 0 0;
+  padding: 16px;
+  width: min(80vw, 80vh);
+  height: min(80vw, 80vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#popover svg {
+  width: 100%;
+  height: 100%;
+}
+
+#popover video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  /* Mirror the preview like a selfie view; decoding reads the raw stream */
+  transform: scaleX(-1);
+}
+
+#popover .message {
+  margin: 0;
+  color: #6b6650;
+  text-align: center;
+}

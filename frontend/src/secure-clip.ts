@@ -1,6 +1,9 @@
 import html from "./secure-clip.html?raw";
 import css from "./secure-clip.css?raw";
 
+/** Components **/
+import "./components/qr-code/qr-code.ai";
+
 /** SVG Icons */
 import eyeOn from "lucide-static/icons/eye.svg?raw";
 import eyeOff from "lucide-static/icons/eye-off.svg?raw";
@@ -10,7 +13,6 @@ import dices from "lucide-static/icons/dices.svg?raw";
 import globe from "lucide-static/icons/globe.svg?raw";
 import globeOff from "lucide-static/icons/globe-off.svg?raw";
 
-import encodeQR from "qr";
 import { Crypt, SecureClip } from "./core";
 
 class SecureClipElement extends HTMLElement {
@@ -46,8 +48,9 @@ class SecureClipElement extends HTMLElement {
     field.addEventListener("keydown", (e) => {
       if (e.key === "Enter") field.blur();
     });
+
     qr.innerHTML = qrCode;
-    qr.addEventListener("click", () => this.showQrPopover(field.value));
+    qr.addEventListener("click", () => this.shadow!.querySelector("qr-code")!.show(field.value));
     help.innerHTML = circleHelp;
     help.addEventListener("click", () => {
       field.value = "system-help";
@@ -90,21 +93,6 @@ class SecureClipElement extends HTMLElement {
       if (document.visibilityState === "hidden") flush();
     });
     window.addEventListener("beforeunload", flush);
-  }
-
-  showQrPopover(value: string) {
-    const backdrop = this.shadow!.getElementById("qr-backdrop")!;
-    const popover = this.shadow!.getElementById("qr-popover")!;
-    const svg = encodeQR(value, "svg");
-    popover.innerHTML = svg.replace(">", `><rect width="100%" height="100%" fill="#e8e4c8"/>`);
-    backdrop.hidden = false;
-    const dismiss = () => {
-      backdrop.hidden = true;
-      backdrop.removeEventListener("click", dismiss);
-      document.removeEventListener("keydown", dismiss);
-    };
-    backdrop.addEventListener("click", dismiss);
-    document.addEventListener("keydown", dismiss);
   }
 
   connectedCallback() {
