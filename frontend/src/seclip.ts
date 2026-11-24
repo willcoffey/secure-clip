@@ -18,7 +18,7 @@ async function main() {
 
   if (opts.flags.h || opts.flags.help) {
     console.log(`Secure clipboard CLI.
-Usage: seclip [OPTIONS] get|set|subscribe|qr
+Usage: seclip [OPTIONS] get|set|subscribe|qr|qr-url
 
   -h, --help              Print help
   -d [HOST]               Host (default: SECLIP_HOST env var, else 127.0.0.1:3000)
@@ -36,6 +36,9 @@ Examples:
     return;
   }
   const host = opts.options.d ?? getEnv("SECLIP_HOST") ?? "127.0.0.1:3000";
+  if (opts.operands[0] === "qr-url") {
+    return console.log(encodeQR(`${opts.flags.nossl ? "http" : "https"}://${host}/`, "term"));
+  }
   const passphrase = opts.options.passphrase ?? getEnv("SECLIP_PASSPHRASE");
   if (!passphrase) throw "ERR: No passphrase. Use --passphrase or set SECLIP_PASSPHRASE";
 

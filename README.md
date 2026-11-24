@@ -55,6 +55,8 @@ In addition to one off reads, a board can be subscribed to receive updates whene
 changes.
 `seclip subscribe -d URL --passphrase PASSPHRASE`.
 
+`seclip qr-url` prints a QR code of the web app URL, for opening it on a phone.
+
 
 ## Web App
 The webapp is a simple text area that displays the contents of the clipboard and updates it on 
