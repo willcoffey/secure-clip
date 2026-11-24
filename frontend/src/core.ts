@@ -34,6 +34,12 @@ export function assertMessage(x: unknown): asserts x is Message {
   throw new Error("missing command");
 }
 
+export function assertServerAllowedMessage(msg: Message) {
+  if(msg.command === "error") return;
+  if(msg.command === "set-ciphertext") return;
+  throw new Error(`Server sent "${msg.command}" rejected`);
+}
+
 // Encrypted value stored on server, id is SHA256(PBKDF2(passphrase, salt))
 export interface Encrypted {
   iv: string;
@@ -253,6 +259,8 @@ export class SecureClip {
     try {
       const msg = JSON.parse(text);
       assertMessage(msg);
+      /** The server should only be allowed to run some commands, i.e. not set the passphrase */
+      assertServerAllowedMessage(msg);
       this.stdin(msg);
     } catch (e) {
       this.stdin({ command: "error", body: "[client] Invalid message from server" });
