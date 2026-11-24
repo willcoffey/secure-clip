@@ -21,7 +21,7 @@ async function main() {
 Usage: seclip [OPTIONS] get|set|subscribe|qr
 
   -h, --help              Print help
-  -d [HOST]               Host (default: 127.0.0.1:3000)
+  -d [HOST]               Host (default: SECLIP_HOST env var, else 127.0.0.1:3000)
   --passphrase [PHRASE]   Passphrase (default: SECLIP_PASSPHRASE env var)
   --salt [SALT]           Salt (priority: Option, Env, Hostname, fetch request)
   --nossl                 Use plain HTTP or WS for connection
@@ -35,7 +35,7 @@ Examples:
   seclip -d example.com --passphrase swordfish get`);
     return;
   }
-  const host = opts.options.d ?? "127.0.0.1:3000";
+  const host = opts.options.d ?? getEnv("SECLIP_HOST") ?? "127.0.0.1:3000";
   const passphrase = opts.options.passphrase ?? getEnv("SECLIP_PASSPHRASE");
   if (!passphrase) throw "ERR: No passphrase. Use --passphrase or set SECLIP_PASSPHRASE";
 

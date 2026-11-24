@@ -39,15 +39,16 @@ node frontend/src/seclip.ts -h
 ## Terminal
 Help can be shown via `seclip -h`, to read data in a specific clipboard run 
 `seclip get -d URL --passphrase PASSPHRASE`. The passphrase can be omitted if the `SECLIP_PASSPHRASE`
-env variable is set.
+env variable is set, and `-d` can be omitted if `SECLIP_HOST` is set.
 
 To set the contents of a board text can be piped to it via `echo "hello" | seclip set -d URL 
 --passphrase PASSPHRASE`. For ease of use I add the two aliases and the env variable to my 
 to my `.bashrc`
 ```
 export SECLIP_PASSPHRASE="swordfish"
-alias setclip='seclip -d HOST set'
-alias getclip='seclip -d HOST get'
+export SECLIP_HOST="<salt>.<account>.workers.dev"
+alias setclip='seclip set'
+alias getclip='seclip get'
 ```
 
 In addition to one off reads, a board can be subscribed to receive updates whenever that board 
