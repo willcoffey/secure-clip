@@ -65,7 +65,10 @@
   height: 100%;
   object-fit: cover;
   border-radius: 4px;
-  /* Mirror the preview like a selfie view; decoding reads the raw stream */
+}
+
+/* Front cameras get a selfie-style preview; decoding reads the raw stream */
+#popover video.mirror {
   transform: scaleX(-1);
 }
 

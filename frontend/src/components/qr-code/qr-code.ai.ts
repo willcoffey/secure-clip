@@ -103,6 +103,11 @@ export class QrCodeElement extends HTMLElement {
       return;
     }
 
+    // Mirror unless the camera says it's rear-facing. Laptop webcams usually
+    // report "user" or nothing; phone rear cameras report "environment".
+    const track = (video.srcObject as MediaStream | null)?.getVideoTracks()[0];
+    video.classList.toggle("mirror", track?.getSettings().facingMode !== "environment");
+
     const canvas = new QRCanvas();
     let reading = false;
     const cancelLoop = frameLoop(async () => {
