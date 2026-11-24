@@ -44,7 +44,7 @@ Examples:
 
   const command = opts.operands[0];
   if (command !== "get" && command !== "set" && command !== "subscribe" && command !== "qr") {
-    console.error("ERR: command must be get, set, subscribe, or qr");
+    console.error("ERR: command must be get, set, subscribe, qr, or qr-url");
     exit(1);
   }
   const ssl = opts.flags.nossl ? false : true;
