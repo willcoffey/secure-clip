@@ -8,11 +8,10 @@ type Mode = "show" | "url" | "scan";
 
 /**
  * <qr-code> popover. Call show(value) to display value as a QR code over a
- * backdrop; the URL button shows a link to this page with value in the
- * hash (#p=). The Scan button switches to the camera; when a code is read
- * the popover closes and a "scan" CustomEvent<string> is dispatched with
- * the decoded text (just the value, if it was such a link). Escape or a
- * backdrop click dismisses it.
+ * backdrop; the URL button shows a QR of this page's URL. The Scan button
+ * switches to the camera; when a code is read the popover closes and a
+ * "scan" CustomEvent<string> is dispatched with the decoded text. Escape or
+ * a backdrop click dismisses it.
  */
 export class QrCodeElement extends HTMLElement {
   shadow?: ShadowRoot;
@@ -47,9 +46,7 @@ export class QrCodeElement extends HTMLElement {
 
   show(value: string) {
     this.value = value;
-    // Passphrase goes in the hash so it is never sent to the server.
-    const page = location.origin + location.pathname;
-    this.url = `${page}#p=${encodeURIComponent(value)}`;
+    this.url = location.origin + location.pathname;
     this.el("backdrop").hidden = false;
     if (!this.open) document.addEventListener("keydown", this.onKeydown);
     this.open = true;
@@ -130,8 +127,7 @@ export class QrCodeElement extends HTMLElement {
         : result?.find((r): r is string => typeof r === "string");
       if (text === undefined) return;
       this.hide();
-      const detail = hashValue(text) ?? text;
-      this.dispatchEvent(new CustomEvent<string>("scan", { detail }));
+      this.dispatchEvent(new CustomEvent<string>("scan", { detail: text }));
     });
     this.stopScan = () => {
       cancelLoop();
@@ -148,16 +144,6 @@ export class QrCodeElement extends HTMLElement {
 
   private el(id: string): HTMLElement {
     return this.shadow!.getElementById(id)!;
-  }
-}
-
-/** The #p= value from a URL made by show(), or undefined if not one */
-function hashValue(text: string): string | undefined {
-  try {
-    const hash = new URL(text).hash.slice(1);
-    return new URLSearchParams(hash).get("p") ?? undefined;
-  } catch {
-    return undefined;
   }
 }
 
