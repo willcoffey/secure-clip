@@ -1,5 +1,6 @@
 import html from "./secure-clip.html?raw";
 import css from "./secure-clip.css?raw";
+import help from "./help.md?raw";
 
 /** Components **/
 import "./components/qr-code/qr-code.ai";
@@ -27,6 +28,8 @@ class SecureClipElement extends HTMLElement {
     localStorage.getItem("sc:passphrase") ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
   );
   shadow?: ShadowRoot;
+  /** Local presentation state; never sent to core */
+  state = { markdown: false, help: false, showPassphrase: false };
 
   randomizePassphrase(field: HTMLInputElement) {
     const passphrase = Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false);
@@ -35,7 +38,7 @@ class SecureClipElement extends HTMLElement {
     this.core.stdin({ command: "set-passphrase", body: passphrase });
   }
 
-  initPassphraseField(field: HTMLInputElement, qr: HTMLButtonElement, help: HTMLButtonElement) {
+  initPassphraseField(field: HTMLInputElement, qr: HTMLButtonElement) {
     field.value = this.core.state.passphrase;
 
     /**
@@ -63,17 +66,12 @@ class SecureClipElement extends HTMLElement {
       localStorage.setItem("sc:passphrase", passphrase);
       this.core.stdin({ command: "set-passphrase", body: passphrase });
     });
-
-    help.innerHTML = circleHelp;
-    help.addEventListener("click", () => {
-      field.value = "system-help";
-      this.core.stdin({ command: "set-passphrase", body: "system-help" });
-    });
   }
 
   initHideShowIcon(field: HTMLInputElement, toggle: HTMLButtonElement) {
     toggle.addEventListener("click", () => {
-      const show = field.type === "password";
+      this.state.showPassphrase = !this.state.showPassphrase;
+      const show = this.state.showPassphrase;
       field.type = show ? "text" : "password";
       toggle.innerHTML = show ? eyeOff : eyeOn;
       toggle.setAttribute("aria-pressed", String(show));
@@ -124,42 +122,54 @@ class SecureClipElement extends HTMLElement {
     const markdownView = this.shadow.querySelector("sandboxed-markdown")!;
 
     toggle.innerHTML = eyeOn;
+    passphraseHelp.innerHTML = circleHelp;
     passphraseDice.innerHTML = dices;
     passphraseConnect.classList.add("disconnected");
     passphraseConnect.innerHTML = globeOff;
     passphraseDice.addEventListener("click", () => this.randomizePassphrase(passphraseField));
+    passphraseHelp.addEventListener("click", () => {
+      this.state.help = !this.state.help;
+      applyView();
+    });
 
     passphraseConnect.addEventListener("click", () => {
       const command = this.core.state.connected ? "disconnect" : "connect";
       this.core.stdin({ command });
     });
 
-    this.initPassphraseField(passphraseField, passphraseQr, passphraseHelp);
+    this.initPassphraseField(passphraseField, passphraseQr);
     this.initHideShowIcon(passphraseField, toggle);
     this.initTextarea(textarea);
 
     /** Initialize the mardkown button */
     markdownToggle.innerHTML = fileText;
-    const setMarkdown = (show: boolean) => {
-      if (show) markdownView.markdown = textarea.value;
-      markdownView.hidden = !show;
-      textarea.hidden = show;
-      markdownToggle.setAttribute("aria-pressed", String(show));
+    const applyView = () => {
+      const { markdown: showMarkdown, help: showHelp } = this.state;
+      const showRendered = showMarkdown || showHelp;
+      if (showRendered) markdownView.markdown = showHelp ? help : textarea.value;
+      markdownView.hidden = !showRendered;
+      textarea.hidden = showRendered;
+      passphraseHelp.setAttribute("aria-pressed", String(showHelp));
+      markdownToggle.setAttribute("aria-pressed", String(showMarkdown));
       markdownToggle.setAttribute(
         "aria-label",
-        show ? "Hide rendered markdown" : "Show rendered markdown",
+        showMarkdown ? "Hide rendered markdown" : "Show rendered markdown",
       );
     };
     markdownToggle.addEventListener("click", () => {
-      setMarkdown(markdownToggle.getAttribute("aria-pressed") !== "true");
+      this.state.markdown = !this.state.markdown;
+      this.state.help = false;
+      applyView();
     });
 
     this.core.render = (command) => {
       if (command === "set-plaintext" || command === "set-ciphertext") {
         textarea.value = this.core.state.plaintext;
-        if (!markdownView.hidden) markdownView.markdown = this.core.state.plaintext;
+        if (this.state.markdown && !this.state.help) markdownView.markdown = this.core.state.plaintext;
       } else if (command === "set-passphrase") {
-        setMarkdown(false);
+        this.state.markdown = false;
+        this.state.help = false;
+        applyView();
       } else if (command === "socket-open" || command === "socket-close") {
         const connected = this.core.state.connected;
         passphraseConnect.classList.toggle("connected", connected);
@@ -170,7 +180,6 @@ class SecureClipElement extends HTMLElement {
       }
     };
     this.core.stdin({ command: "connect" });
-
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       this.core.stdin({ command: "connect" });

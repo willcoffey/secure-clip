@@ -12,16 +12,6 @@ type Message =
   | { command: "disconnect" }
   | { command: "error"; body: string };
 
-const HELP_TEXT = `secure-clip: encrypted shared clipboard
-
-  type a passphrase to open a board
-  boards are end-to-end encrypted with AES-GCM
-  the server stores only ciphertext and never sees your passphrase
-
-special boards:
-  system-stats  server storage statistics
-  system-help   this message`;
-
 interface Env {
   CLIP_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
@@ -35,29 +25,14 @@ interface Command {
 async function route(
   cmd: Command,
   service: Service,
-  ctx: { wsConnections: number; idHandlers: number } = { wsConnections: 0, idHandlers: 0 },
   sender?: unknown,
 ): Promise<{ data?: Message } | null> {
   switch (cmd.command) {
     case "load": {
-      /** Hardcoded value for 'system-stats' after PBKDF2 */
-      if (cmd.body.id === "19QMaI/tgJRLXttrbjn+tsXAdCg+cwzjtvqUOotgi3k=") {
-        return { data: { command: "set-plaintext", body: service.systemStats(ctx) } };
-      }
-      /** Hardcoded value for 'system-help' after PBKDF2 */
-      if (cmd.body.id === "XxNGVedDm/znlrf2GsMnom1aYuhCfKsf9BK51HiExcc=") {
-        return { data: { command: "set-plaintext", body: HELP_TEXT } };
-      }
       const raw = await service.load({ id: cmd.body.id });
       return { data: { command: "set-ciphertext", body: raw ? JSON.parse(raw) : null } };
     }
     case "update": {
-      if (
-        [
-          "19QMaI/tgJRLXttrbjn+tsXAdCg+cwzjtvqUOotgi3k=",
-          "XxNGVedDm/znlrf2GsMnom1aYuhCfKsf9BK51HiExcc=",
-        ].indexOf(cmd.body.id) !== -1
-      ) return {};
       try {
         await service.update({
           id: cmd.body.id,
@@ -192,11 +167,7 @@ export class PlatformConnector extends DurableObject {
       return;
     }
 
-    const ctx = {
-      wsConnections: this.wsHandlers.size,
-      idHandlers: [...this.wsHandlers.values()].reduce((n, arr) => n + arr.length, 0),
-    };
-    const result = await route(cmd, this.service, ctx, ws);
+    const result = await route(cmd, this.service, ws);
     if (!result) return;
     if (result.data) ws.send(JSON.stringify(result.data));
   }

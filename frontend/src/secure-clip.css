@@ -123,7 +123,8 @@ input {
 #passphrase-connect.disconnected {
   color: #f92672;
 }
-#markdown-toggle[aria-pressed="true"] {
+#markdown-toggle[aria-pressed="true"],
+#passphrase-help[aria-pressed="true"] {
   color: var(--accent);
 }
 

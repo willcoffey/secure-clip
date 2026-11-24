@@ -9,8 +9,12 @@ import DEFAULT_THEME from "./theme.ai.css?raw";
  * theme.ai.css. Content is wrapped in <body class="markdown-body">.
  *
  * The HTML from parse() is treated as hostile and passed through unmodified.
- *  1. iframe sandbox (see .html), no tokens: no scripts, forms, popups, top
- *     navigation or same-origin access; can't touch our DOM or localStorage.
+ *  1. iframe sandbox (see .html): no scripts, forms, top navigation or
+ *     same-origin access; can't touch our DOM or localStorage. Only
+ *     allow-popups(-to-escape-sandbox), so a user-clicked target="_blank"
+ *     link opens a normal tab; without scripts nothing else can open one.
+ *     The new tab gets no referrer (meta) and, since target="_blank" implies
+ *     noopener, no opener. Not covered: an explicit rel="opener" link.
  *  2. CSP default-src 'none': no subresource requests (images, fonts, CSS
  *     url(), media, frames). Only inline styles.
  *  3. <base href="about:srcdoc">: srcdoc otherwise inherits our URL as its
@@ -66,6 +70,7 @@ export class SandboxedMarkdownElement extends HTMLElement {
     frame.srcdoc = `<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
 <meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
 <base href="about:srcdoc">
 <style>${this.css}</style>
 <body class="markdown-body">${body}</body>`;

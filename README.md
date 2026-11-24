@@ -63,7 +63,7 @@ change. The control bar at the top contains
  - Display the passphrase as a QR code, for synchronizing devices without needing to type.
  - Toggle markdown parsing, done in a sandboxed iframe so no image or other external embeds.
  - Display connection status, and click to toggle connection status.
- - Display additional help. Loads a system board, refresh the page to go back to user board.
+ - Toggles help to be displayed on or off.
 
 
 ## Claude

@@ -54,26 +54,6 @@ export class Service {
     return rows[0]?.ciphertext ?? null;
   }
 
-  systemStats(
-    { wsConnections, idHandlers }: { wsConnections: number; idHandlers: number },
-  ): string {
-    const [{ total, count }] = this.sql.exec<{ total: number; count: number }>(
-      `SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) as total, COUNT(*) as count FROM clips`,
-    ).toArray();
-    const boards = this.sql.exec<{ id: string; len: number; last_accessed: number }>(
-      `SELECT id, LENGTH(ciphertext) as len, last_accessed FROM clips ORDER BY last_accessed DESC`,
-    ).toArray();
-    const lines = [
-      `total size: ${(total / 1024).toFixed(2)} kb`,
-      `total boards: ${count}`,
-      `ws connections: ${wsConnections}`,
-      `id handlers: ${idHandlers}`,
-      "",
-      ...boards.map((r) => `${r.id}: ${r.len} (${r.last_accessed})`),
-    ];
-    return lines.join("\n");
-  }
-
   subscribe({ id, handler }: { id: string; handler: Handler }) {
     if (!this.handlers.has(id)) this.handlers.set(id, new Set());
     this.handlers.get(id)!.add(handler);
