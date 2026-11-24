@@ -1,11 +1,12 @@
-Finally going to refactor this, didn't want to start till I was ready to finish.
-
-# Must Do
-- Security model explanation so Claude stops flagging design choices
-- Fix for input blur, i.e. sending hash each keypress
-- QR Code scanning
-- Markdown parsing
-- Commands 
+# Priority List
+- Cleanup & style refactor. Simplify in prep for hardening.
+- Decide on storing multiple passphrases, need to avoid turning it into a docs
+  system.
+- Writeups and guide for using as a skill.
+- Make the qr code cli dep vendored or dynamic, shouldn't be required to run
+  basic usage.
+- Hardening.
 
 # Eventually
-- Write & read keys
+- Write and read keys?
+
