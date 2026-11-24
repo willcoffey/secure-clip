@@ -94,7 +94,8 @@ Examples:
         break;
     }
   } catch (e) {
-    console.log(e);
+    console.error(e);
+    exit(1);
   }
 }
 
