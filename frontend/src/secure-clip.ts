@@ -23,6 +23,7 @@ class SecureClipElement extends HTMLElement {
     {
       host: location.host,
       ssl: location.protocol === "https:",
+      salt: document.querySelector<HTMLMetaElement>('meta[name="seclip-salt"]')?.content ?? "",
       transport: "socket",
     },
     localStorage.getItem("sc:passphrase") ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
@@ -165,7 +166,9 @@ class SecureClipElement extends HTMLElement {
     this.core.render = (command) => {
       if (command === "set-plaintext" || command === "set-ciphertext") {
         textarea.value = this.core.state.plaintext;
-        if (this.state.markdown && !this.state.help) markdownView.markdown = this.core.state.plaintext;
+        if (this.state.markdown && !this.state.help) {
+          markdownView.markdown = this.core.state.plaintext;
+        }
       } else if (command === "set-passphrase") {
         this.state.markdown = false;
         this.state.help = false;

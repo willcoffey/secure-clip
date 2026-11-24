@@ -4,17 +4,20 @@ import css from "./qr-code.ai.css?raw";
 import encodeQR from "qr";
 import { frameLoop, QRCanvas, rearCamera } from "qr/dom.js";
 
-type Mode = "show" | "scan";
+type Mode = "show" | "url" | "scan";
 
 /**
  * <qr-code> popover. Call show(value) to display value as a QR code over a
- * backdrop. The Scan button switches to the camera; when a code is read the
- * popover closes and a "scan" CustomEvent<string> is dispatched with the
- * decoded text. Escape or a backdrop click dismisses it.
+ * backdrop; the URL button shows a link to this page with value in the
+ * hash (#p=). The Scan button switches to the camera; when a code is read
+ * the popover closes and a "scan" CustomEvent<string> is dispatched with
+ * the decoded text (just the value, if it was such a link). Escape or a
+ * backdrop click dismisses it.
  */
 export class QrCodeElement extends HTMLElement {
   shadow?: ShadowRoot;
   private value = "";
+  private url = "";
   private open = false;
   /** Stops the active camera + frame loop, if any */
   private stopScan?: () => void;
@@ -34,6 +37,7 @@ export class QrCodeElement extends HTMLElement {
     // Clicks inside the panel shouldn't reach the backdrop's dismiss handler.
     this.el("panel").addEventListener("click", (e) => e.stopPropagation());
     this.el("show").addEventListener("click", () => this.setMode("show"));
+    this.el("url").addEventListener("click", () => this.setMode("url"));
     this.el("scan").addEventListener("click", () => this.setMode("scan"));
   }
 
@@ -43,6 +47,9 @@ export class QrCodeElement extends HTMLElement {
 
   show(value: string) {
     this.value = value;
+    // Passphrase goes in the hash so it is never sent to the server.
+    const page = location.origin + location.pathname;
+    this.url = `${page}#p=${encodeURIComponent(value)}`;
     this.el("backdrop").hidden = false;
     if (!this.open) document.addEventListener("keydown", this.onKeydown);
     this.open = true;
@@ -60,13 +67,15 @@ export class QrCodeElement extends HTMLElement {
   private setMode(mode: Mode) {
     this.cancelScan();
     this.el("show").setAttribute("aria-pressed", String(mode === "show"));
+    this.el("url").setAttribute("aria-pressed", String(mode === "url"));
     this.el("scan").setAttribute("aria-pressed", String(mode === "scan"));
-    if (mode === "show") this.renderQr();
+    if (mode === "show") this.renderQr(this.value);
+    else if (mode === "url") this.renderQr(this.url);
     else this.startScan();
   }
 
-  private renderQr() {
-    const svg = encodeQR(this.value, "svg");
+  private renderQr(text: string) {
+    const svg = encodeQR(text, "svg");
     this.el("popover").innerHTML = svg.replace(
       ">",
       `><rect width="100%" height="100%" fill="#e8e4c8"/>`,
@@ -121,7 +130,8 @@ export class QrCodeElement extends HTMLElement {
         : result?.find((r): r is string => typeof r === "string");
       if (text === undefined) return;
       this.hide();
-      this.dispatchEvent(new CustomEvent<string>("scan", { detail: text }));
+      const detail = hashValue(text) ?? text;
+      this.dispatchEvent(new CustomEvent<string>("scan", { detail }));
     });
     this.stopScan = () => {
       cancelLoop();
@@ -138,6 +148,16 @@ export class QrCodeElement extends HTMLElement {
 
   private el(id: string): HTMLElement {
     return this.shadow!.getElementById(id)!;
+  }
+}
+
+/** The #p= value from a URL made by show(), or undefined if not one */
+function hashValue(text: string): string | undefined {
+  try {
+    const hash = new URL(text).hash.slice(1);
+    return new URLSearchParams(hash).get("p") ?? undefined;
+  } catch {
+    return undefined;
   }
 }
 

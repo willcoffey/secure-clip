@@ -1,15 +1,15 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { Encrypted, SecureClip } from "../frontend/src/core.ts";
 
-const options = { host: "localhost:3000", ssl: false };
+const options = { host: "localhost:3000", salt: "znmnw6bsmppdwzymz2kehmcftm2mjh4k", ssl: false };
 const rand = () => crypto.randomUUID();
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 const settings = {
   passphrase: "swordfish",
   plaintext: "The password is always swordfish",
   encrypted: {
-    "ciphertext": "OUtrENuOpXPEqQOmxr2/CRwfcg5EeE5IYBTWdmoxCf/8YvFKtvziM0+zBXdBfHIv",
-    "iv": "afKGjSsGI99o7MiC",
+    "ciphertext": "YHpXn07ciRKnt0rHP4tqG+USDBf0klzby5mWm6va15CSRM39aY8r6oIVNgZX+11t",
+    "iv": "NCvcp8m8OmgZwOvS",
   },
 };
 
@@ -26,8 +26,8 @@ Deno.test("set-plaintext", async () => {
   assertEquals(clip.state.plaintext, settings.plaintext);
 });
 
-/* 
- * set-passphrase = derive key & id, send load request 
+/*
+ * set-passphrase = derive key & id, send load request
  */
 Deno.test("set-passphrase", async () => {
   const clip = new SecureClip(options, settings.passphrase);

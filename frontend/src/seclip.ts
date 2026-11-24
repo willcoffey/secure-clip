@@ -12,6 +12,7 @@ async function main() {
   const opts = parseCommandLineOptions(argv, {
     d: true,
     passphrase: true,
+    salt: true,
     n: true,
   });
 
@@ -22,6 +23,7 @@ Usage: seclip [OPTIONS] get|set|subscribe|qr
   -h, --help              Print help
   -d [HOST]               Host (default: 127.0.0.1:3000)
   --passphrase [PHRASE]   Passphrase (default: SECLIP_PASSPHRASE env var)
+  --salt [SALT]           Salt (priority: Option, Env, Hostname, fetch request)
   --nossl                 Use plain HTTP or WS for connection
   -n [COUNT]              (subscribe) Exit after receiving COUNT messages
 
@@ -44,15 +46,18 @@ Examples:
   }
   const ssl = opts.flags.nossl ? false : true;
 
-
   try {
+    const salt = command === "qr"
+      ? ""
+      : opts.options.salt ?? getEnv("SECLIP_SALT") ?? saltFromHost(host) ??
+        await fetchSalt(host, ssl);
     switch (command) {
       case "qr":
         console.log(encodeQR(passphrase, "term"));
         break;
       case "subscribe":
         {
-          const core = new SecureClip({ host, ssl, transport: "socket" }, passphrase);
+          const core = new SecureClip({ host, ssl, salt, transport: "socket" }, passphrase);
           const limit = opts.options.n ? parseInt(opts.options.n) : Infinity;
           let count = 0;
           core.render = (command) => {
@@ -65,7 +70,7 @@ Examples:
         break;
       case "get":
         {
-          const core = new SecureClip({ host, ssl, transport: "post" }, passphrase);
+          const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           core.render = (command) => {
             if (command === "set-ciphertext" || command === "set-plaintext") {
               console.log(core.state.plaintext);
@@ -77,7 +82,7 @@ Examples:
         break;
       case "set":
         {
-          const core = new SecureClip({ host, ssl, transport: "post" }, passphrase);
+          const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           const chunks: string[] = [];
           const decoder = new TextDecoder();
           for await (const chunk of stdin) {
@@ -95,7 +100,19 @@ Examples:
 
 main();
 
+/** Salt from a "<salt>.<account>.workers.dev" style host: 32 lowercase base32 chars. */
+function saltFromHost(host: string): string | undefined {
+  const label = host.split(".")[0];
+  return /^[a-z2-7]{32}$/.test(label) ? label : undefined;
+}
 
+/** HEAD the host and read the salt the Worker advertises. */
+async function fetchSalt(host: string, ssl: boolean): Promise<string> {
+  const res = await fetch(`${ssl ? "https" : "http"}://${host}/`, { method: "HEAD" });
+  const salt = res.headers.get("X-Seclip-Salt");
+  if (!salt) throw `ERR: ${host} sent no salt. Use --salt or set SECLIP_SALT`;
+  return salt;
+}
 
 /** Vendored in my basic command arg parser */
 interface CommandLineOptions {

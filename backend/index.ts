@@ -14,6 +14,7 @@ type Message =
 
 interface Env {
   CLIP_ROOM: DurableObjectNamespace;
+  SECLIP_SALT: string;
   ASSETS: Fetcher;
 }
 
@@ -196,7 +197,12 @@ export default {
     const res = await env.ASSETS.fetch(request);
     const headers = new Headers(res.headers);
     headers.set("Cross-Origin-Opener-Policy", "same-origin");
-    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+    headers.set("X-Seclip-Salt", env.SECLIP_SALT);
+
+
+    const out = new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+    const isPage = headers.get("Content-Type")?.includes("text/html");
+    return isPage ? injectSaltAsMetaTag(out, env.SECLIP_SALT) : out;
   },
 };
 
@@ -205,3 +211,15 @@ function sleep(ms: number) {
     setTimeout(res, ms);
   });
 }
+
+/** Adds <meta name="seclip-salt"> to <head> of an HTML response. */
+function injectSaltAsMetaTag(response: Response, salt: string): Response {
+  return new HTMLRewriter()
+    .on("head", {
+      element(el) {
+        el.prepend(`<meta name="seclip-salt" content="${salt}">`, { html: true });
+      },
+    })
+    .transform(response);
+}
+

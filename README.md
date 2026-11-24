@@ -46,8 +46,8 @@ To set the contents of a board text can be piped to it via `echo "hello" | secli
 to my `.bashrc`
 ```
 export SECLIP_PASSPHRASE="swordfish"
-alias setclip='seclip -d secure-clip.wilcof.workers.dev set'
-alias getclip='seclip -d secure-clip.wilcof.workers.dev get'
+alias setclip='seclip -d HOST set'
+alias getclip='seclip -d HOST get'
 ```
 
 In addition to one off reads, a board can be subscribed to receive updates whenever that board 
@@ -83,11 +83,11 @@ Inside my global `CLAUDE.md` I have
 ## Clipboard Tool
 Use `seclip` to send data to the user's clipboard.
 
-- Get current value: `seclip -d secure-clip.wilcof.workers.dev get`
-- Set a value: `echo "..." | seclip -d secure-clip.wilcof.workers.dev set`
+- Get current value: `seclip -d HOST get`
+- Set a value: `echo "..." | seclip -d HOST set`
 - Use `seclip -h` for additional options
 
-Default host: `secure-clip.wilcof.workers.dev`
+Default host: `HOST`
 ```
 
 ## VIM
@@ -97,7 +97,7 @@ to the clipboard.
 ```
 " Get contents of seclip clipboard, store it in c register, and put it.
 function s:GetWebClipboard()
-  let @c = system("seclip -d secure-clip.wilcof.workers.dev get")
+  let @c = system("seclip -d HOST get")
   exec "normal! \"cp"
 endfunction
 nnoremap <silent> vv :call <SID>GetWebClipboard()<CR>
@@ -106,7 +106,7 @@ nnoremap <silent> vv :call <SID>GetWebClipboard()<CR>
 " Store visual selection in seclip clipboard.
 function s:PutWebClipboard() range
   let val = s:get_visual_selection()
-  call system("seclip -d secure-clip.wilcof.workers.dev set", val)
+  call system("seclip -d HOST set", val)
 endfunction
 "https://stackoverflow.com/questions/1533565/how-to-get-visually-selected-text-in-vimscript
 function s:get_visual_selection()

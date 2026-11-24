@@ -1,7 +1,5 @@
 // Debug logging
 const DEBUG = false;
-const SALT = "CDVY91c4f1n+j5M8CeJjDg==";
-
 // Uint8Array indexed by char code — direct array lookup, no hashing
 //deno-fmt-ignore
 const B64_REVERSE = new Uint8Array(128);
@@ -35,8 +33,8 @@ export function assertMessage(x: unknown): asserts x is Message {
 }
 
 export function assertServerAllowedMessage(msg: Message) {
-  if(msg.command === "error") return;
-  if(msg.command === "set-ciphertext") return;
+  if (msg.command === "error") return;
+  if (msg.command === "set-ciphertext") return;
   throw new Error(`Server sent "${msg.command}" rejected`);
 }
 
@@ -56,6 +54,7 @@ export interface State {
 
 export interface SecureClipOptions {
   host: string;
+  salt: string;
   ssl?: boolean;
   transport?: "socket" | "post";
 }
@@ -79,6 +78,7 @@ export class SecureClip {
       host: options.host,
       ssl: options.ssl ?? true,
       transport: options.transport ?? "post",
+      salt: options.salt,
     };
 
     this.state = {
@@ -111,8 +111,8 @@ export class SecureClip {
 
     switch (message.command) {
       case "set-passphrase": {
-        const current = await this.deriveKeyAndId(this.state.passphrase);
-        const { id } = await this.deriveKeyAndId(message.body);
+        const current = await this.deriveKeyAndId(this.state.passphrase, this.options.salt);
+        const { id } = await this.deriveKeyAndId(message.body, this.options.salt);
         if (transport === "socket") {
           this.send("unsubscribe", { id: current.id });
           this.send("subscribe", { id });
@@ -124,7 +124,7 @@ export class SecureClip {
         break;
       }
       case "set-plaintext": {
-        const { id, key } = await this.deriveKeyAndId(this.state.passphrase);
+        const { id, key } = await this.deriveKeyAndId(this.state.passphrase, this.options.salt);
         /**
          * Called when the user updates the plaintext input. encrypts the text
          * and submits it to the server
@@ -137,7 +137,7 @@ export class SecureClip {
       }
       case "set-ciphertext": {
         /** Server will send message via post response or websocket triggering this */
-        const { key } = await this.deriveKeyAndId(this.state.passphrase);
+        const { key } = await this.deriveKeyAndId(this.state.passphrase, this.options.salt);
         if (message.body?.ciphertext) {
           this.state.encrypted = message.body;
           const plaintext = await Crypt.decryptGCM(message.body, key);
@@ -168,9 +168,12 @@ export class SecureClip {
    * Runs PBKDF2 for key expansion on the passphrase and creates an id for it
    * by running SHA256 on it.
    */
-  private async deriveKeyAndId(passphrase: string): Promise<{ id: string; key: string }> {
+  private async deriveKeyAndId(
+    passphrase: string,
+    salt: string,
+  ): Promise<{ id: string; key: string }> {
     if (this.cryptoCache[passphrase]) return this.cryptoCache[passphrase];
-    const expanded = await Crypt.deriveKeyAndId(passphrase);
+    const expanded = await Crypt.deriveKeyAndId(passphrase, Crypt.base64toUint8Array(salt));
     this.cryptoCache[passphrase] = expanded;
     return expanded;
   }
@@ -188,7 +191,7 @@ export class SecureClip {
      * ready promise.
      */
     ws.onopen = async () => {
-      const { id } = await this.deriveKeyAndId(this.state.passphrase);
+      const { id } = await this.deriveKeyAndId(this.state.passphrase, this.options.salt);
       res(ws);
       this.state.connected = true;
       this.send("load", { id });
@@ -275,9 +278,11 @@ export class Crypt {
    * splits the output into two independent keys so the server ID
    * never leaks information about the encryption key.
    */
-  static async deriveKeyAndId(passphrase: string): Promise<{ key: string; id: string }> {
+  static async deriveKeyAndId(
+    passphrase: string,
+    salt: Uint8Array<ArrayBuffer>,
+  ): Promise<{ key: string; id: string }> {
     Crypt.assertSubtleCrypto();
-    const salt = Crypt.base64toUint8Array(SALT);
 
     /**
      * get seed into pbkdf2 and set crypto settings
