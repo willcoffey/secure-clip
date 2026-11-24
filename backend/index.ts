@@ -193,7 +193,10 @@ export default {
     if (url.pathname === "/favicon.ico") {
       return Response.redirect(new URL("/icon-48x48.png", request.url).href, 301);
     }
-    return env.ASSETS.fetch(request);
+    const res = await env.ASSETS.fetch(request);
+    const headers = new Headers(res.headers);
+    headers.set("Cross-Origin-Opener-Policy", "same-origin");
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 };
 
