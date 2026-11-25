@@ -10,3 +10,14 @@
 # Eventually
 - Write and read keys?
 
+---
+
+
+secure-clip TODO
+1. Backend cleanup
+2. Testing (node:test, self-starting worker, CI)
+3. Rate limiting
+4. Claude skill file
+5. npm package + v0.1 tag
+6. README
+
