@@ -18,7 +18,8 @@
  * URL (-d, else SECLIP_HOST) looks like [https://]host/<server_path>#s=<salt>;
  * the fragment never reaches the server. The scheme picks the transport:
  * http:// is plain http/ws, https:// or none is https/wss.
- * Salt priority: --salt, SECLIP_SALT, URL.
+ * Throws if the URL has no server path; the API lives only under it.
+ * Salt priority: --salt, -d URL, SECLIP_SALT, SECLIP_HOST URL.
  * Passphrase priority: --passphrase, SECLIP_PASSPHRASE; "" if neither.
  * command is the first operand; throws unless it is one of commands, so
  * the returned command is typed as that union.
@@ -34,11 +35,16 @@ export function parseSeclipOptions<C extends string>(
   if (!commands.includes(command)) throw `ERR: command must be one of ${commands.join(", ")}`;
   const d = cli.options.d ?? env.SECLIP_HOST ?? "http://127.0.0.1:3000";
   const url = new URL(/^https?:\/\//i.test(d) ? d : `https://${d}`);
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!path) throw `ERR: URL ${d} has no server path. Use host/<server_path>#s=SALT`;
   const fragmentSalt = new URLSearchParams(url.hash.slice(1)).get("s");
+  // An explicit -d outranks the ambient SECLIP_SALT; SECLIP_HOST does not.
+  const fromD = cli.options.d !== undefined;
   return {
-    host: url.host + url.pathname.replace(/\/$/, ""),
+    host: url.host + path,
     ssl: url.protocol === "https:",
-    salt: cli.options.salt ?? env.SECLIP_SALT ?? fragmentSalt ?? "",
+    salt: cli.options.salt ?? (fromD ? fragmentSalt : null) ?? env.SECLIP_SALT ??
+      (fromD ? null : fragmentSalt) ?? "",
     passphrase: cli.options.passphrase ?? env.SECLIP_PASSPHRASE ?? "",
     command,
   };

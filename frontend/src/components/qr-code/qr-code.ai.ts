@@ -59,8 +59,10 @@ export class QrCodeElement extends HTMLElement {
     const label = copy.querySelector(".label")!;
     copy.querySelector(".icon")!.innerHTML = Copy;
     copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(this.shareUrl());
-      label.textContent = "Copied";
+      // Denied, insecure-context or missing clipboard shows Failed.
+      const ok = await navigator.clipboard?.writeText(this.shareUrl())
+        .then(() => true, () => false);
+      label.textContent = ok ? "Copied" : "Failed";
       setTimeout(() => (label.textContent = "Copy"), 1500);
     });
     const paste = this.el("paste");
@@ -210,11 +212,13 @@ export class QrCodeElement extends HTMLElement {
 
 /**
  * Reads a share URL, host/<path>/#s=<salt>[&p=<passphrase>]. Undefined when
- * the text isn't a URL or carries neither salt nor passphrase.
+ * the text isn't a URL, is for another origin (its path and salt would be
+ * applied to this server), or carries neither salt nor passphrase.
  */
 function parseShareUrl(text: string): ScanDetail | undefined {
   if (!URL.canParse(text)) return;
   const url = new URL(text);
+  if (url.origin !== location.origin) return;
   const share = new URLSearchParams(url.hash.slice(1));
   const detail = {
     serverPath: url.pathname.replace(/\/$/, "") || undefined,
