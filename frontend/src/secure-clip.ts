@@ -7,14 +7,16 @@ import "./components/qr-code/qr-code.ai";
 import "./components/sandboxed-markdown/sandboxed-markdown.ai";
 
 /** SVG Icons */
-import eyeOn from "lucide-static/icons/eye.svg?raw";
-import eyeOff from "lucide-static/icons/eye-off.svg?raw";
-import qrCode from "lucide-static/icons/qr-code.svg?raw";
-import circleHelp from "lucide-static/icons/circle-question-mark.svg?raw";
-import dices from "lucide-static/icons/dices.svg?raw";
-import globe from "lucide-static/icons/globe.svg?raw";
-import globeOff from "lucide-static/icons/globe-off.svg?raw";
-import fileText from "lucide-static/icons/file-text.svg?raw";
+import {
+  CircleQuestionMark,
+  Dices,
+  Eye,
+  EyeOff,
+  FileText,
+  Globe,
+  GlobeOff,
+  QrCode,
+} from "lucide-static";
 
 import { Crypt, SecureClip } from "./core";
 
@@ -55,7 +57,7 @@ class SecureClipElement extends HTMLElement {
       if (e.key === "Enter") field.blur();
     });
 
-    qr.innerHTML = qrCode;
+    qr.innerHTML = QrCode;
     qr.addEventListener("click", () => this.shadow!.querySelector("qr-code")!.show(field.value));
 
     /**
@@ -74,7 +76,7 @@ class SecureClipElement extends HTMLElement {
       this.state.showPassphrase = !this.state.showPassphrase;
       const show = this.state.showPassphrase;
       field.type = show ? "text" : "password";
-      toggle.innerHTML = show ? eyeOff : eyeOn;
+      toggle.innerHTML = show ? EyeOff : Eye;
       toggle.setAttribute("aria-pressed", String(show));
       toggle.setAttribute("aria-label", show ? "Hide passphrase" : "Show passphrase");
     });
@@ -122,11 +124,11 @@ class SecureClipElement extends HTMLElement {
     const markdownToggle = this.shadow.getElementById("markdown-toggle") as HTMLButtonElement;
     const markdownView = this.shadow.querySelector("sandboxed-markdown")!;
 
-    toggle.innerHTML = eyeOn;
-    passphraseHelp.innerHTML = circleHelp;
-    passphraseDice.innerHTML = dices;
+    toggle.innerHTML = Eye;
+    passphraseHelp.innerHTML = CircleQuestionMark;
+    passphraseDice.innerHTML = Dices;
     passphraseConnect.classList.add("disconnected");
-    passphraseConnect.innerHTML = globeOff;
+    passphraseConnect.innerHTML = GlobeOff;
     passphraseDice.addEventListener("click", () => this.randomizePassphrase(passphraseField));
     passphraseHelp.addEventListener("click", () => {
       this.state.help = !this.state.help;
@@ -143,7 +145,7 @@ class SecureClipElement extends HTMLElement {
     this.initTextarea(textarea);
 
     /** Initialize the mardkown button */
-    markdownToggle.innerHTML = fileText;
+    markdownToggle.innerHTML = FileText;
     const applyView = () => {
       const { markdown: showMarkdown, help: showHelp } = this.state;
       const showRendered = showMarkdown || showHelp;
@@ -177,7 +179,7 @@ class SecureClipElement extends HTMLElement {
         const connected = this.core.state.connected;
         passphraseConnect.classList.toggle("connected", connected);
         passphraseConnect.classList.toggle("disconnected", !connected);
-        passphraseConnect.innerHTML = connected ? globe : globeOff;
+        passphraseConnect.innerHTML = connected ? Globe : GlobeOff;
         passphraseField.disabled = !connected;
         textarea.disabled = !connected;
       }
