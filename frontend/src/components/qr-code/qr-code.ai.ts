@@ -3,7 +3,7 @@ import css from "./qr-code.ai.css?raw";
 
 import encodeQR from "qr";
 import { frameLoop, QRCanvas, rearCamera } from "qr/dom.js";
-import { Copy } from "lucide-static";
+import { ClipboardPaste, Copy } from "lucide-static";
 
 type Mode = "url" | "scan";
 
@@ -17,10 +17,10 @@ export type ScanDetail = {
 /**
  * <qr-code> popover. Call show(passphrase, serverPath, salt) to display a QR
  * of the share URL, origin/<serverPath>/#s=<salt>, over a backdrop, with the
- * passphrase added (p) when the "with passphrase" checkbox is ticked; the copy
- * icon copies that same URL. The Scan button switches to the camera; when a
- * share URL is read the popover closes and a "scan" CustomEvent<ScanDetail>
- * is dispatched with its parts.
+ * passphrase added (p) when the "with passphrase" checkbox is ticked; Copy
+ * copies that same URL. The Scan button switches to the camera; when a share
+ * URL is read (or pasted with Paste) the popover closes and a "scan"
+ * CustomEvent<ScanDetail> is dispatched with its parts.
  * Escape or a backdrop click dismisses it.
  */
 export class QrCodeElement extends HTMLElement {
@@ -50,7 +50,7 @@ export class QrCodeElement extends HTMLElement {
     this.el("panel").addEventListener("click", (e) => e.stopPropagation());
     this.el("url").addEventListener("click", () => this.setMode("url"));
     this.el("scan").addEventListener("click", () => this.setMode("scan"));
-    // The checkbox and copy icon sit inside the URL button, so their clicks
+    // The checkbox, Copy and Paste sit inside the URL button, so their clicks
     // then bubble to it, which (re)renders URL mode.
     this.el("with-passphrase").addEventListener("click", () => {
       this.setWithPassphrase(!this.withPassphrase);
@@ -63,6 +63,25 @@ export class QrCodeElement extends HTMLElement {
       label.textContent = "Copied";
       setTimeout(() => (label.textContent = "Copy"), 1500);
     });
+    const paste = this.el("paste");
+    const pasteLabel = paste.querySelector(".label")!;
+    paste.querySelector(".icon")!.innerHTML = ClipboardPaste;
+    paste.addEventListener("click", async () => {
+      // Denied or unavailable clipboard reads as "" and shows Invalid.
+      const text = await navigator.clipboard?.readText().catch(() => "");
+      if (this.emitScan(text ?? "")) return;
+      pasteLabel.textContent = "Invalid";
+      setTimeout(() => (pasteLabel.textContent = "Paste"), 1500);
+    });
+  }
+
+  /** Closes and dispatches "scan" if text is a share URL; false otherwise */
+  private emitScan(text: string): boolean {
+    const detail = parseShareUrl(text.trim());
+    if (!detail) return false;
+    this.hide();
+    this.dispatchEvent(new CustomEvent<ScanDetail>("scan", { detail }));
+    return true;
   }
 
   disconnectedCallback() {
@@ -169,10 +188,7 @@ export class QrCodeElement extends HTMLElement {
         ? result
         : result?.find((r): r is string => typeof r === "string");
       // Codes that aren't share URLs are ignored; keep scanning.
-      const detail = text === undefined ? undefined : parseShareUrl(text);
-      if (!detail) return;
-      this.hide();
-      this.dispatchEvent(new CustomEvent<ScanDetail>("scan", { detail }));
+      if (text !== undefined) this.emitScan(text);
     });
     this.stopScan = () => {
       cancelLoop();

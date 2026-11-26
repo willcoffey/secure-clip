@@ -52,10 +52,10 @@
   gap: 4px;
 }
 
-/* Second row: two cells, "with passphrase" | "Copy" */
+/* Second row: cells "with passphrase" | "Copy" | "Paste" */
 #url .options {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   align-self: stretch;
   /* Bleed over the button's 10px padding so the cell borders reach its edges */
   margin: 4px -10px -10px;
@@ -73,7 +73,8 @@
 }
 
 #with-passphrase,
-#copy {
+#copy,
+#paste {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -83,7 +84,8 @@
 }
 
 #with-passphrase:hover,
-#copy:hover {
+#copy:hover,
+#paste:hover {
   color: #272822;
   background: rgba(0, 0, 0, 0.12);
 }
@@ -92,14 +94,21 @@
   text-decoration: underline;
 }
 
-/* Room for "Copied" so the layout doesn't shift after a click */
+/* Room for "Copied" / "Invalid" so the layout doesn't shift after a click */
 #copy .label {
   min-width: 6ch;
   text-align: left;
 }
 
+#paste .label {
+  min-width: 7ch;
+  text-align: left;
+}
+
 #copy .icon,
-#copy .icon svg {
+#copy .icon svg,
+#paste .icon,
+#paste .icon svg {
   display: block;
   width: 14px;
   height: 14px;
