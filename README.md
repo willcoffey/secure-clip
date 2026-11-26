@@ -1,3 +1,68 @@
+# TODO Before Publish
+ - example domain, heavily limited
+ - error paths
+ - docker setup
+ - SECURITY.md
+ - CI
+
+
+---
+
+# Summary
+ - Not vetted, see SECURITY.md
+
+# Quick Test
+```
+npm install
+# set salt?
+npm run dev
+echo "foo" | sec....
+seclip get
+top | claude "rewrite this in html format..." | seclip set
+```
+
+
+# Install
+## CLI
+
+## Docker
+
+To function outside `localhost` requires HTTPS setup. This is left left open as
+the approach varies. The salt can be specified in the url as 
+`<salt>.example.com`, `example.com/<salt>` and is set in the `Header`. 
+
+
+HTTPS setup, so that more than just `localhost` works, is left open. The client
+detects the salt from the URL as `<salt>.example.com` or `example.com/<salt>`.
+See SECURITY.md for tradeoffs.
+
+ - Suggested: Cloudflare as DNS provider, and Caddy added to Docker for
+   Let's Encrypt.
+
+@TODO: URL parsing. The CLI only detects the salt from the subdomain today;
+`example.com/<salt>` is not parsed yet.
+
+
+HTTPS setup so more than just `localhost` works is left open. The client parses
+the salt from the url as <salt.domain.com> or <domain.com/salt. See SECURITY.md
+for tradeoffs.
+ - Suggested: Cloudflare as DNS provider and Caddy added to docker for 
+LetsEncrypt
+
+
+## Deploy
+
+# Usage
+ - @TODO - Include URL fragment optionally in QR
+
+# Additional Setup
+## skill
+## vimrc
+
+
+Pre Thu Nov 26 09:26:41 AM EST 2026
+---
+
 # Summary
 *secure-clip* is a front and backend for an end-to-end encrypted clipboard utility. There is a deno
 terminal utility `seclip.ts`, and a progressive web app front end. It uses symmetric key encryption,
