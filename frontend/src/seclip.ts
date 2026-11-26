@@ -14,7 +14,6 @@ COMMANDS
   url                     Logs the url for the board (same value as qr)
 
 OPTIONS
-
   -h, --help              Print help
   -d [URL]                URL (priority: Option, SECLIP_HOST, 127.0.0.1:3000)
   --passphrase [PHRASE]   Passphrase (priority: Option, SECLIP_PASSPHRASE)
