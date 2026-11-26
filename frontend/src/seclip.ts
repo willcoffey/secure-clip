@@ -1,13 +1,6 @@
 import { SecureClip } from "./core.ts";
 import encodeQR from "qr";
 
-/** Runtime shim so this runs under both Deno and Node. */
-const D = (globalThis as any).Deno;
-const argv: string[] = D ? D.args : process.argv.slice(2);
-const getEnv = (k: string): string | undefined => (D ? D.env.get(k) : process.env[k]);
-const exit = (code: number): never => (D ? D.exit(code) : process.exit(code)) as never;
-const stdin = D ? D.stdin.readable : process.stdin;
-
 async function main() {
   const opts = parseCommandLineOptions(argv, {
     d: true,
@@ -65,7 +58,7 @@ Examples:
           let count = 0;
           core.render = (command) => {
             if (command !== "set-plaintext" && command !== "set-ciphertext") return;
-            console.log(core.state.plaintext);
+            process.stdout.write(core.state.plaintext);
             if (++count >= limit) exit(0);
           };
           await core.stdin({ command: "connect" });
@@ -76,7 +69,7 @@ Examples:
           const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           core.render = (command) => {
             if (command === "set-ciphertext" || command === "set-plaintext") {
-              console.log(core.state.plaintext);
+              process.stdout.write(core.state.plaintext);
             }
           };
           // set-passphrase derives the id and fires a load over POST
@@ -87,12 +80,14 @@ Examples:
         {
           const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           const chunks: string[] = [];
-          const decoder = new TextDecoder();
+          const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
           for await (const chunk of stdin) {
-            chunks.push(decoder.decode(chunk));
+            chunks.push(decoder.decode(chunk, { stream: true }));
           }
+          chunks.push(decoder.decode());
           const text = chunks.join("");
           await core.stdin({ command: "set-plaintext", body: text });
+          if (core.state.error) throw new Error(core.state.error);
         }
         break;
     }

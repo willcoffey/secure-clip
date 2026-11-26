@@ -3,3 +3,5 @@ dist/
 .wrangler/
 *.sw?
 .env
+.claude/settings.local.json
+.claude/worktrees/

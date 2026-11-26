@@ -23,7 +23,7 @@
     "prepublishOnly": "tsc -p frontend/tsconfig.json --noEmit && tsc -p backend/tsconfig.json --noEmit && npm run build:cli",
     "worker": "wrangler dev --config backend/wrangler.toml --env-file \"$PWD/.env\" --port 3000 --ip 0.0.0.0",
     "deploy": "sh scripts/deploy.sh",
-    "test": "deno test --allow-net=localhost:3000"
+    "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "qr": "^0.7.2"

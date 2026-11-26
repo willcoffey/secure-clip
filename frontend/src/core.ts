@@ -1,7 +1,6 @@
 // Debug logging
 const DEBUG = false;
 // Uint8Array indexed by char code — direct array lookup, no hashing
-//deno-fmt-ignore
 const B64_REVERSE = new Uint8Array(128);
 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
   .split("").forEach((c, i) => {
@@ -66,7 +65,7 @@ export interface SecureClipOptions {
 export class SecureClip {
   state: State;
   /** Render hook used for web component, called when state changes, including connection status  */
-  render: (command: string) => void = console.log;
+  render: (command: string) => void = () => {};
 
   private options: Required<SecureClipOptions>;
   private socket: Promise<WebSocket> | false = false;
@@ -132,7 +131,7 @@ export class SecureClip {
         this.state.plaintext = message.body;
         const encrypted = await Crypt.encryptGCM(message.body, key);
         this.state.encrypted = encrypted;
-        this.send("update", { id, ciphertext: encrypted });
+        await this.send("update", { id, ciphertext: encrypted });
         break;
       }
       case "set-ciphertext": {
@@ -390,7 +389,7 @@ export class Crypt {
       Crypt.base64toUint8Array(encrypted.ciphertext),
     );
 
-    return new TextDecoder().decode(plaintext);
+    return new TextDecoder("utf-8", { ignoreBOM: true }).decode(plaintext);
   }
 
   static randomBytes(bytes = 16): Uint8Array<ArrayBuffer> {
