@@ -238,13 +238,6 @@ customElements.define("secure-clip", SecureClipElement);
 navigator.serviceWorker?.register("/sw.js");
 
 /**
- * Reads the share URL host/<server_path>/#s=<salt>[&p=<passphrase>]. Server
- * path and salt are kept in localStorage for launches without them, e.g. the
- * installed PWA at "/". The optional passphrase replaces the stored one.
- * The address bar is rewritten without p, so the passphrase doesn't linger
- * in history and the QR url share (location.href) carries only path and salt.
- * passphrase is null when neither the URL nor storage has one.
- *
  * Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  */
 function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: string | null } {
