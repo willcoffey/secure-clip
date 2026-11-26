@@ -15,9 +15,9 @@ COMMANDS
 
 OPTIONS
   -h, --help              Print help
-  -d [URL]                URL (priority: Option, SECLIP_HOST, 127.0.0.1:3000)
-  --passphrase [PHRASE]   Passphrase (priority: Option, SECLIP_PASSPHRASE)
-  --salt [SALT]           Salt (priority: Option, ENV, URL)
+  -d [URL]                URL (-d, SECLIP_HOST)
+  --passphrase [PHRASE]   Passphrase (--passphrase, SECLIP_PASSPHRASE)
+  --salt [SALT]           Salt (--salt, -d URL, SECLIP_SALT, SECLIP_HOST)
   -n [COUNT]              (subscribe) Exit after receiving COUNT messages
   --with-passphrase       (qr, url) Include the passphrase in the URL
 
@@ -26,7 +26,7 @@ Examples:
   echo "hello" | seclip set
   seclip subscribe
   seclip -n 1 subscribe
-  seclip -d example.com --passphrase swordfish get`);
+  seclip -d example.com/SERVER_PATH#s=SALT --passphrase swordfish get`);
 }
 
 async function main() {
