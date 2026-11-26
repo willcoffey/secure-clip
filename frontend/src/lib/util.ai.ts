@@ -18,7 +18,8 @@
  * URL (-d, else SECLIP_HOST) looks like [https://]host/<server_path>#s=<salt>;
  * the fragment never reaches the server. The scheme picks the transport:
  * http:// is plain http/ws, https:// or none is https/wss.
- * Throws if the URL has no server path; the API lives only under it.
+ * Throws if there is no URL, or it has no server path; the API lives
+ * only under it.
  * Salt priority: --salt, -d URL, SECLIP_SALT, SECLIP_HOST URL.
  * Passphrase priority: --passphrase, SECLIP_PASSPHRASE; "" if neither.
  * command is the first operand; throws unless it is one of commands, so
@@ -33,7 +34,8 @@ export function parseSeclipOptions<C extends string>(
 ): { host: string; ssl: boolean; salt: string; passphrase: string; command: C } {
   const command = cli.operands[0] as C;
   if (!commands.includes(command)) throw `ERR: command must be one of ${commands.join(", ")}`;
-  const d = cli.options.d ?? env.SECLIP_HOST ?? "http://127.0.0.1:3000";
+  const d = cli.options.d ?? env.SECLIP_HOST;
+  if (!d) throw "ERR: No URL. Use -d or set SECLIP_HOST";
   const url = new URL(/^https?:\/\//i.test(d) ? d : `https://${d}`);
   const path = url.pathname.replace(/\/+$/, "");
   if (!path) throw `ERR: URL ${d} has no server path. Use host/<server_path>#s=SALT`;
