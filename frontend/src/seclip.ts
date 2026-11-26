@@ -2,7 +2,7 @@ import { SecureClip } from "./core.ts";
 import encodeQR from "qr";
 
 async function main() {
-  const opts = parseCommandLineOptions(argv, {
+  const opts = parseCommandLineOptions(process.argv.slice(2), {
     d: true,
     passphrase: true,
     salt: true,
@@ -28,24 +28,24 @@ Examples:
   seclip -d example.com --passphrase swordfish get`);
     return;
   }
-  const host = opts.options.d ?? getEnv("SECLIP_HOST") ?? "127.0.0.1:3000";
+  const host = opts.options.d ?? process.env.SECLIP_HOST ?? "127.0.0.1:3000";
   if (opts.operands[0] === "qr-url") {
     return console.log(encodeQR(`${opts.flags.nossl ? "http" : "https"}://${host}/`, "term"));
   }
-  const passphrase = opts.options.passphrase ?? getEnv("SECLIP_PASSPHRASE");
+  const passphrase = opts.options.passphrase ?? process.env.SECLIP_PASSPHRASE;
   if (!passphrase) throw "ERR: No passphrase. Use --passphrase or set SECLIP_PASSPHRASE";
 
   const command = opts.operands[0];
   if (command !== "get" && command !== "set" && command !== "subscribe" && command !== "qr") {
     console.error("ERR: command must be get, set, subscribe, qr, or qr-url");
-    exit(1);
+    process.exit(1);
   }
   const ssl = opts.flags.nossl ? false : true;
 
   try {
     const salt = command === "qr"
       ? ""
-      : opts.options.salt ?? getEnv("SECLIP_SALT") ?? saltFromHost(host) ??
+      : opts.options.salt ?? process.env.SECLIP_SALT ?? saltFromHost(host) ??
         await fetchSalt(host, ssl);
     switch (command) {
       case "qr":
@@ -59,7 +59,7 @@ Examples:
           core.render = (command) => {
             if (command !== "set-plaintext" && command !== "set-ciphertext") return;
             process.stdout.write(core.state.plaintext);
-            if (++count >= limit) exit(0);
+            if (++count >= limit) process.exit(0);
           };
           await core.stdin({ command: "connect" });
         }
@@ -81,7 +81,7 @@ Examples:
           const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           const chunks: string[] = [];
           const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
-          for await (const chunk of stdin) {
+          for await (const chunk of process.stdin) {
             chunks.push(decoder.decode(chunk, { stream: true }));
           }
           chunks.push(decoder.decode());
@@ -93,7 +93,7 @@ Examples:
     }
   } catch (e) {
     console.error(e);
-    exit(1);
+    process.exit(1);
   }
 }
 
