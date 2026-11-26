@@ -44,6 +44,55 @@
   color: #272822;
 }
 
+#url {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+#include-passphrase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+#include-passphrase:hover {
+  color: #272822;
+  background: rgba(0, 0, 0, 0.12);
+  text-decoration: underline;
+}
+
+/* Red flags the riskier choice: the QR then carries the passphrase */
+#include-passphrase[aria-checked="true"] {
+  color: #8f1a10;
+}
+
+#include-passphrase[aria-checked="true"]:hover {
+  color: #6e130b;
+}
+
+#include-passphrase .box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+#include-passphrase[aria-checked="true"] .box::after {
+  content: "✓";
+}
+
 #popover {
   background: #e8e4c8;
   border-radius: 8px 8px 0 0;

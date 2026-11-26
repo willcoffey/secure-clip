@@ -14,7 +14,7 @@ type Message =
 
 interface Env {
   CLIP_ROOM: DurableObjectNamespace;
-  SECLIP_SALT: string;
+  SECLIP_SERVER_PATH: string;
   ASSETS: Fetcher;
 }
 
@@ -187,22 +187,27 @@ export class PlatformConnector extends DurableObject {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
+
+    // API comes from env,  /<SECLIP_SERVER_PATH>/api/, unlisted
+    const base = `/${env.SECLIP_SERVER_PATH}`;
+    if (env.SECLIP_SERVER_PATH && url.pathname.startsWith(`${base}/api/`)) {
       const stub = env.CLIP_ROOM.get(env.CLIP_ROOM.idFromName("global"));
       return stub.fetch(request);
     }
+
     if (url.pathname === "/favicon.ico") {
       return Response.redirect(new URL("/icon-48x48.png", request.url).href, 301);
     }
-    const res = await env.ASSETS.fetch(request);
+    const isAssets = url.pathname === base || url.pathname === `${base}/`;
+    const res = await env.ASSETS.fetch(
+      isAssets ? new Request(new URL("/", url), request) : request,
+    );
+
     const headers = new Headers(res.headers);
     headers.set("Cross-Origin-Opener-Policy", "same-origin");
-    headers.set("X-Seclip-Salt", env.SECLIP_SALT);
-
 
     const out = new Response(res.body, { status: res.status, statusText: res.statusText, headers });
-    const isPage = headers.get("Content-Type")?.includes("text/html");
-    return isPage ? injectSaltAsMetaTag(out, env.SECLIP_SALT) : out;
+    return out;
   },
 };
 
@@ -211,15 +216,3 @@ function sleep(ms: number) {
     setTimeout(res, ms);
   });
 }
-
-/** Adds <meta name="seclip-salt"> to <head> of an HTML response. */
-function injectSaltAsMetaTag(response: Response, salt: string): Response {
-  return new HTMLRewriter()
-    .on("head", {
-      element(el) {
-        el.prepend(`<meta name="seclip-salt" content="${salt}">`, { html: true });
-      },
-    })
-    .transform(response);
-}
-

@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { availableParallelism } from "node:os";
 
 const CLI = fileURLToPath(new URL("../frontend/src/seclip.ts", import.meta.url));
-const HOST = "localhost:3000";
+const HOST = `http://localhost:3000/${process.env.SECLIP_SERVER_PATH ?? "dev"}`;
 const SALT = "znmnw6bsmppdwzymz2kehmcftm2mjh4k";
 const enc = new TextEncoder();
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -41,7 +41,7 @@ async function cli(
   gapMs = 50,
   onStdout?: () => void,
 ): Promise<Result> {
-  const child = spawn(process.execPath, [CLI, "-d", HOST, "--nossl", "--salt", SALT, ...args], {
+  const child = spawn(process.execPath, [CLI, "-d", HOST, "--salt", SALT, ...args], {
     stdio: "pipe",
   });
   const out: Buffer[] = [];

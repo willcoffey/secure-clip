@@ -3,7 +3,14 @@
     <div id="popover"></div>
     <div id="actions">
       <button id="show" type="button" aria-pressed="true">Passphrase</button>
-      <button id="url" type="button" aria-pressed="false">URL</button>
+      <button id="url" type="button" aria-pressed="false">
+        <span>URL</span>
+        <!-- A span, not <input>: some browsers don't deliver clicks to
+             inputs nested in a <button> -->
+        <span id="include-passphrase" role="checkbox" aria-checked="false">
+          <span class="box"></span>include passphrase
+        </span>
+      </button>
       <button id="scan" type="button" aria-pressed="false">Scan</button>
     </div>
   </div>

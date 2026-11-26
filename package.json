@@ -19,7 +19,7 @@
   "scripts": {
     "check": "tsc -p frontend/tsconfig.json --watch & tsc -p backend/tsconfig.json --watch",
     "build": "vite build frontend --watch",
-    "build:cli": "vite build -c vite.cli.config.ts",
+    "build:cli": "vite build -c vite.cli.config.ts && chmod +x dist/cli/seclip.js",
     "prepublishOnly": "tsc -p frontend/tsconfig.json --noEmit && tsc -p backend/tsconfig.json --noEmit && npm run build:cli",
     "worker": "wrangler dev --config backend/wrangler.toml --env-file \"$PWD/.env\" --port 3000 --ip 0.0.0.0",
     "deploy": "sh scripts/deploy.sh",

@@ -1,24 +1,17 @@
 import { SecureClip } from "./core.ts";
+import { assertSeclipOptions, parseSeclipOptions } from "./lib/util.ai.ts";
 import encodeQR from "qr";
 
-async function main() {
-  const opts = parseCommandLineOptions(process.argv.slice(2), {
-    d: true,
-    passphrase: true,
-    salt: true,
-    n: true,
-  });
-
-  if (opts.flags.h || opts.flags.help) {
-    console.log(`Secure clipboard CLI.
+function showHelp() {
+  console.log(`Secure clipboard CLI.
 Usage: seclip [OPTIONS] get|set|subscribe|qr|qr-url
 
   -h, --help              Print help
-  -d [HOST]               Host (default: SECLIP_HOST env var, else 127.0.0.1:3000)
-  --passphrase [PHRASE]   Passphrase (default: SECLIP_PASSPHRASE env var)
-  --salt [SALT]           Salt (priority: Option, Env, Hostname, fetch request)
-  --nossl                 Use plain HTTP or WS for connection
+  -d [URL]                URL (priority: Option, SECLIP_HOST, 127.0.0.1:3000)
+  --passphrase [PHRASE]   Passphrase (priority: Option, SECLIP_PASSPHRASE)
+  --salt [SALT]           Salt (priority: Option, ENV, URL)
   -n [COUNT]              (subscribe) Exit after receiving COUNT messages
+  --with-passphrase       (qr-url) Include the passphrase in the URL
 
 Examples:
   seclip get
@@ -26,32 +19,40 @@ Examples:
   seclip subscribe
   seclip -n 1 subscribe
   seclip -d example.com --passphrase swordfish get`);
-    return;
-  }
-  const host = opts.options.d ?? process.env.SECLIP_HOST ?? "127.0.0.1:3000";
-  if (opts.operands[0] === "qr-url") {
-    return console.log(encodeQR(`${opts.flags.nossl ? "http" : "https"}://${host}/`, "term"));
-  }
-  const passphrase = opts.options.passphrase ?? process.env.SECLIP_PASSPHRASE;
-  if (!passphrase) throw "ERR: No passphrase. Use --passphrase or set SECLIP_PASSPHRASE";
+}
 
-  const command = opts.operands[0];
-  if (command !== "get" && command !== "set" && command !== "subscribe" && command !== "qr") {
-    console.error("ERR: command must be get, set, subscribe, qr, or qr-url");
-    process.exit(1);
-  }
-  const ssl = opts.flags.nossl ? false : true;
-
+async function main() {
   try {
-    const salt = command === "qr"
-      ? ""
-      : opts.options.salt ?? process.env.SECLIP_SALT ?? saltFromHost(host) ??
-        await fetchSalt(host, ssl);
+    const opts = parseCommandLineOptions(process.argv.slice(2), {
+      d: true,
+      passphrase: true,
+      salt: true,
+      n: true,
+    });
+    if (opts.flags.h || opts.flags.help) return showHelp();
+    const fullOptions = parseSeclipOptions(
+      opts,
+      process.env,
+      ["get", "set", "subscribe", "qr", "qr-url"],
+    );
+    const { host, ssl, salt, passphrase, command } = fullOptions;
+
     switch (command) {
       case "qr":
+        assertSeclipOptions(fullOptions, "passphrase");
         console.log(encodeQR(passphrase, "term"));
-        break;
+        return;
+      case "qr-url":
+      case "qr-url": {
+        const withPassphrase = !!opts.flags["with-passphrase"];
+        if (withPassphrase) assertSeclipOptions(fullOptions, "salt", "passphrase");
+        else assertSeclipOptions(fullOptions, "salt");
+        const fragment = new URLSearchParams({ s: salt, ...(withPassphrase && { p: passphrase }) });
+        console.log(encodeQR(`${ssl ? "https" : "http"}://${host}/#${fragment}`, "term"));
+        return;
+      }
       case "subscribe":
+        assertSeclipOptions(fullOptions, "passphrase", "salt");
         {
           const core = new SecureClip({ host, ssl, salt, transport: "socket" }, passphrase);
           const limit = opts.options.n ? parseInt(opts.options.n) : Infinity;
@@ -65,6 +66,7 @@ Examples:
         }
         break;
       case "get":
+        assertSeclipOptions(fullOptions, "passphrase", "salt");
         {
           const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           core.render = (command) => {
@@ -72,11 +74,11 @@ Examples:
               process.stdout.write(core.state.plaintext);
             }
           };
-          // set-passphrase derives the id and fires a load over POST
           await core.stdin({ command: "set-passphrase", body: passphrase });
         }
         break;
       case "set":
+        assertSeclipOptions(fullOptions, "passphrase", "salt");
         {
           const core = new SecureClip({ host, ssl, salt, transport: "post" }, passphrase);
           const chunks: string[] = [];
@@ -98,20 +100,6 @@ Examples:
 }
 
 main();
-
-/** Salt from a "<salt>.<account>.workers.dev" style host: 32 lowercase base32 chars. */
-function saltFromHost(host: string): string | undefined {
-  const label = host.split(".")[0];
-  return /^[a-z2-7]{32}$/.test(label) ? label : undefined;
-}
-
-/** HEAD the host and read the salt the Worker advertises. */
-async function fetchSalt(host: string, ssl: boolean): Promise<string> {
-  const res = await fetch(`${ssl ? "https" : "http"}://${host}/`, { method: "HEAD" });
-  const salt = res.headers.get("X-Seclip-Salt");
-  if (!salt) throw `ERR: ${host} sent no salt. Use --salt or set SECLIP_SALT`;
-  return salt;
-}
 
 /** Vendored in my basic command arg parser */
 interface CommandLineOptions {

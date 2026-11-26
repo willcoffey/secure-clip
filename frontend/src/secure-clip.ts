@@ -17,18 +17,18 @@ import {
   GlobeOff,
   QrCode,
 } from "lucide-static";
-
 import { Crypt, SecureClip } from "./core";
 
 class SecureClipElement extends HTMLElement {
+  settings = initSettingsFromUrl(); // Initializes salt, passphrase to localStorage
   core = new SecureClip(
     {
-      host: location.host,
+      host: location.host + this.settings.serverPath,
       ssl: location.protocol === "https:",
-      salt: document.querySelector<HTMLMetaElement>('meta[name="seclip-salt"]')?.content ?? "",
+      salt: this.settings.salt,
       transport: "socket",
     },
-    localStorage.getItem("sc:passphrase") ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
+    this.settings.passphrase ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
   );
   shadow?: ShadowRoot;
   /** Local presentation state; never sent to core */
@@ -197,3 +197,28 @@ sheet.replaceSync(css);
 customElements.define("secure-clip", SecureClipElement);
 
 navigator.serviceWorker?.register("/sw.js");
+
+/**
+ * Reads the share URL host/<server_path>/#s=<salt>[&p=<passphrase>]. Server
+ * path and salt are kept in localStorage for launches without them, e.g. the
+ * installed PWA at "/". The optional passphrase replaces the stored one.
+ * The address bar is rewritten without p, so the passphrase doesn't linger
+ * in history and the QR url share (location.href) carries only path and salt.
+ * passphrase is null when neither the URL nor storage has one.
+ *
+ * Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+ */
+function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: string | null } {
+  const share = new URLSearchParams(location.hash.slice(1));
+  const fromUrl = (key: string, value: string | null) => {
+    value ||= localStorage.getItem(key) ?? "";
+    localStorage.setItem(key, value);
+    return value;
+  };
+  const serverPath = fromUrl("sc:server", location.pathname.replace(/\/$/, ""));
+  const salt = fromUrl("sc:salt", share.get("s"));
+  const p = share.get("p");
+  if (p) localStorage.setItem("sc:passphrase", p);
+  history.replaceState(null, "", `${serverPath}/#${new URLSearchParams({ s: salt })}`);
+  return { serverPath, salt, passphrase: p || localStorage.getItem("sc:passphrase") };
+}

@@ -8,16 +8,19 @@ type Mode = "show" | "url" | "scan";
 
 /**
  * <qr-code> popover. Call show(value) to display value as a QR code over a
- * backdrop; the URL button shows a QR of this page's URL. The Scan button
- * switches to the camera; when a code is read the popover closes and a
- * "scan" CustomEvent<string> is dispatched with the decoded text. Escape or
- * a backdrop click dismisses it.
+ * backdrop; the URL button shows a QR of this page's URL, with value added as
+ * the passphrase (p) when its "include passphrase" checkbox is ticked. The
+ * Scan button switches to the camera; when a code is read the popover closes
+ * and a "scan" CustomEvent<string> is dispatched with the decoded text.
+ * Escape or a backdrop click dismisses it.
  */
 export class QrCodeElement extends HTMLElement {
   shadow?: ShadowRoot;
   private value = "";
   private url = "";
   private open = false;
+  /** URL mode adds the passphrase to the QR'd URL */
+  private includePassphrase = false;
   /** Stops the active camera + frame loop, if any */
   private stopScan?: () => void;
   /** Incremented on every mode change, so a slow camera start can tell it is stale */
@@ -38,6 +41,11 @@ export class QrCodeElement extends HTMLElement {
     this.el("show").addEventListener("click", () => this.setMode("show"));
     this.el("url").addEventListener("click", () => this.setMode("url"));
     this.el("scan").addEventListener("click", () => this.setMode("scan"));
+    // The checkbox sits inside the URL button, so this click then bubbles to
+    // it, which (re)renders URL mode with the new setting.
+    this.el("include-passphrase").addEventListener("click", () => {
+      this.setIncludePassphrase(!this.includePassphrase);
+    });
   }
 
   disconnectedCallback() {
@@ -46,7 +54,9 @@ export class QrCodeElement extends HTMLElement {
 
   show(value: string) {
     this.value = value;
-    this.url = location.origin + location.pathname;
+    this.url = location.href;
+    // Start unchecked each time so the passphrase is never shared by accident.
+    this.setIncludePassphrase(false);
     this.el("backdrop").hidden = false;
     if (!this.open) document.addEventListener("keydown", this.onKeydown);
     this.open = true;
@@ -67,8 +77,23 @@ export class QrCodeElement extends HTMLElement {
     this.el("url").setAttribute("aria-pressed", String(mode === "url"));
     this.el("scan").setAttribute("aria-pressed", String(mode === "scan"));
     if (mode === "show") this.renderQr(this.value);
-    else if (mode === "url") this.renderQr(this.url);
+    else if (mode === "url") this.renderQr(this.shareUrl());
     else this.startScan();
+  }
+
+  private setIncludePassphrase(on: boolean) {
+    this.includePassphrase = on;
+    this.el("include-passphrase").setAttribute("aria-checked", String(on));
+  }
+
+  /** This page's URL, plus &p=<passphrase> in the fragment when ticked */
+  private shareUrl(): string {
+    if (!this.includePassphrase || !this.value) return this.url;
+    const url = new URL(this.url);
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    fragment.set("p", this.value);
+    url.hash = fragment.toString();
+    return url.href;
   }
 
   private renderQr(text: string) {

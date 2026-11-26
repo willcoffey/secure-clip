@@ -2,7 +2,7 @@ import { test } from "node:test";
 import { strictEqual } from "node:assert/strict";
 import { SecureClip } from "../frontend/src/core.ts";
 
-const options = { host: "localhost:3000", salt: "znmnw6bsmppdwzymz2kehmcftm2mjh4k", ssl: false };
+const options = { host: `localhost:3000/${process.env.SECLIP_SERVER_PATH ?? "dev"}`, salt: "znmnw6bsmppdwzymz2kehmcftm2mjh4k", ssl: false };
 const rand = () => crypto.randomUUID();
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 const settings = {

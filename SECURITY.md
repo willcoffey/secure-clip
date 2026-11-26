@@ -49,3 +49,20 @@ the entire clipboard service. It gets shared by a URL fragment.
     knowing doesn't add much security either.
 
 These are more abuse prevention than security.
+
+
+---
+
+Going with pattern
+
+`server_id.workers.dev` or whatever custom domain becomes `server_id.example.com`
+
+not doing additional server key in path. A subdomain is less secret due to DNS
+leaks, but keeping it secret is for abuse not security. If someone knows it they
+can DOS, not steal secrets.
+
+and additional
+`server_id.workers.dev/secret` 
+buys a secret encrypted inside the HTTPS. But adds some complexity. Subdomain
+is already required for `localStorage` isolation. Only gain is HTTPS/DNS 
+leakage.
