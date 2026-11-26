@@ -4,14 +4,23 @@ import encodeQR from "qr";
 
 function showHelp() {
   console.log(`Secure clipboard CLI.
-Usage: seclip [OPTIONS] get|set|subscribe|qr|qr-url
+Usage: seclip [OPTIONS] get|set|subscribe|qr|url
+
+COMMANDS
+  get                     Loads value from board
+  set                     Saves value to board
+  subscribe               Connects with a socket and streams out board updates
+  qr                      Prints a scannable qr code in the terminal
+  url                     Logs the url for the board (same value as qr)
+
+OPTIONS
 
   -h, --help              Print help
   -d [URL]                URL (priority: Option, SECLIP_HOST, 127.0.0.1:3000)
   --passphrase [PHRASE]   Passphrase (priority: Option, SECLIP_PASSPHRASE)
   --salt [SALT]           Salt (priority: Option, ENV, URL)
   -n [COUNT]              (subscribe) Exit after receiving COUNT messages
-  --with-passphrase       (qr-url) Include the passphrase in the URL
+  --with-passphrase       (qr, url) Include the passphrase in the URL
 
 Examples:
   seclip get
@@ -33,22 +42,19 @@ async function main() {
     const fullOptions = parseSeclipOptions(
       opts,
       process.env,
-      ["get", "set", "subscribe", "qr", "qr-url"],
+      ["get", "set", "subscribe", "qr", "url"],
     );
     const { host, ssl, salt, passphrase, command } = fullOptions;
 
     switch (command) {
       case "qr":
-        assertSeclipOptions(fullOptions, "passphrase");
-        console.log(encodeQR(passphrase, "term"));
-        return;
-      case "qr-url":
-      case "qr-url": {
+      case "url": {
         const withPassphrase = !!opts.flags["with-passphrase"];
         if (withPassphrase) assertSeclipOptions(fullOptions, "salt", "passphrase");
         else assertSeclipOptions(fullOptions, "salt");
         const fragment = new URLSearchParams({ s: salt, ...(withPassphrase && { p: passphrase }) });
-        console.log(encodeQR(`${ssl ? "https" : "http"}://${host}/#${fragment}`, "term"));
+        const url = `${ssl ? "https" : "http"}://${host}/#${fragment}`;
+        console.log(command === "qr" ? encodeQR(url, "term") : url);
         return;
       }
       case "subscribe":
