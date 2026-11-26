@@ -52,7 +52,28 @@
   gap: 4px;
 }
 
-#include-passphrase {
+/* Second row: two cells, "with passphrase" | "Copy" */
+#url .options {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-self: stretch;
+  /* Bleed over the button's 10px padding so the cell borders reach its edges */
+  margin: 4px -10px -10px;
+  border-top: 1px solid #b8b28e;
+}
+
+#url .options > * {
+  justify-content: center;
+  padding: 6px 10px;
+}
+
+#url .options > * + * {
+  border-left: 1px solid #b8b28e;
+  border-radius: 0;
+}
+
+#with-passphrase,
+#copy {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -61,22 +82,39 @@
   border-radius: 4px;
 }
 
-#include-passphrase:hover {
+#with-passphrase:hover,
+#copy:hover {
   color: #272822;
   background: rgba(0, 0, 0, 0.12);
+}
+
+#with-passphrase:hover {
   text-decoration: underline;
 }
 
+/* Room for "Copied" so the layout doesn't shift after a click */
+#copy .label {
+  min-width: 6ch;
+  text-align: left;
+}
+
+#copy .icon,
+#copy .icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
 /* Red flags the riskier choice: the QR then carries the passphrase */
-#include-passphrase[aria-checked="true"] {
+#with-passphrase[aria-checked="true"] {
   color: #8f1a10;
 }
 
-#include-passphrase[aria-checked="true"]:hover {
+#with-passphrase[aria-checked="true"]:hover {
   color: #6e130b;
 }
 
-#include-passphrase .box {
+#with-passphrase .box {
   width: 14px;
   height: 14px;
   border: 1px solid currentColor;
@@ -89,7 +127,7 @@
   line-height: 1;
 }
 
-#include-passphrase[aria-checked="true"] .box::after {
+#with-passphrase[aria-checked="true"] .box::after {
   content: "✓";
 }
 

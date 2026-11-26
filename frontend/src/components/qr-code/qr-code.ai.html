@@ -2,13 +2,17 @@
   <div id="panel">
     <div id="popover"></div>
     <div id="actions">
-      <button id="show" type="button" aria-pressed="true">Passphrase</button>
-      <button id="url" type="button" aria-pressed="false">
+      <button id="url" type="button" aria-pressed="true">
         <span>URL</span>
-        <!-- A span, not <input>: some browsers don't deliver clicks to
-             inputs nested in a <button> -->
-        <span id="include-passphrase" role="checkbox" aria-checked="false">
-          <span class="box"></span>include passphrase
+        <!-- Spans, not <input>/<button>: some browsers don't deliver clicks
+             to controls nested in a <button> -->
+        <span class="options">
+          <span id="with-passphrase" role="checkbox" aria-checked="false">
+            <span class="box"></span>with passphrase
+          </span>
+          <span id="copy" role="button" title="Copy URL">
+            <span class="icon"></span><span class="label">Copy</span>
+          </span>
         </span>
       </button>
       <button id="scan" type="button" aria-pressed="false">Scan</button>

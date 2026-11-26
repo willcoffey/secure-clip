@@ -3,24 +3,34 @@ import css from "./qr-code.ai.css?raw";
 
 import encodeQR from "qr";
 import { frameLoop, QRCanvas, rearCamera } from "qr/dom.js";
+import { Copy } from "lucide-static";
 
-type Mode = "show" | "url" | "scan";
+type Mode = "url" | "scan";
+
+/** What a scanned share URL carries; each part only if present */
+export type ScanDetail = {
+  serverPath?: string;
+  salt?: string;
+  passphrase?: string;
+};
 
 /**
- * <qr-code> popover. Call show(value) to display value as a QR code over a
- * backdrop; the URL button shows a QR of this page's URL, with value added as
- * the passphrase (p) when its "include passphrase" checkbox is ticked. The
- * Scan button switches to the camera; when a code is read the popover closes
- * and a "scan" CustomEvent<string> is dispatched with the decoded text.
+ * <qr-code> popover. Call show(passphrase, serverPath, salt) to display a QR
+ * of the share URL, origin/<serverPath>/#s=<salt>, over a backdrop, with the
+ * passphrase added (p) when the "with passphrase" checkbox is ticked; the copy
+ * icon copies that same URL. The Scan button switches to the camera; when a
+ * share URL is read the popover closes and a "scan" CustomEvent<ScanDetail>
+ * is dispatched with its parts.
  * Escape or a backdrop click dismisses it.
  */
 export class QrCodeElement extends HTMLElement {
   shadow?: ShadowRoot;
-  private value = "";
-  private url = "";
+  private passphrase = "";
+  private serverPath = "";
+  private salt = "";
   private open = false;
   /** URL mode adds the passphrase to the QR'd URL */
-  private includePassphrase = false;
+  private withPassphrase = false;
   /** Stops the active camera + frame loop, if any */
   private stopScan?: () => void;
   /** Incremented on every mode change, so a slow camera start can tell it is stale */
@@ -38,13 +48,20 @@ export class QrCodeElement extends HTMLElement {
     this.el("backdrop").addEventListener("click", () => this.hide());
     // Clicks inside the panel shouldn't reach the backdrop's dismiss handler.
     this.el("panel").addEventListener("click", (e) => e.stopPropagation());
-    this.el("show").addEventListener("click", () => this.setMode("show"));
     this.el("url").addEventListener("click", () => this.setMode("url"));
     this.el("scan").addEventListener("click", () => this.setMode("scan"));
-    // The checkbox sits inside the URL button, so this click then bubbles to
-    // it, which (re)renders URL mode with the new setting.
-    this.el("include-passphrase").addEventListener("click", () => {
-      this.setIncludePassphrase(!this.includePassphrase);
+    // The checkbox and copy icon sit inside the URL button, so their clicks
+    // then bubble to it, which (re)renders URL mode.
+    this.el("with-passphrase").addEventListener("click", () => {
+      this.setWithPassphrase(!this.withPassphrase);
+    });
+    const copy = this.el("copy");
+    const label = copy.querySelector(".label")!;
+    copy.querySelector(".icon")!.innerHTML = Copy;
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(this.shareUrl());
+      label.textContent = "Copied";
+      setTimeout(() => (label.textContent = "Copy"), 1500);
     });
   }
 
@@ -52,15 +69,16 @@ export class QrCodeElement extends HTMLElement {
     this.hide();
   }
 
-  show(value: string) {
-    this.value = value;
-    this.url = location.href;
+  show(passphrase: string, serverPath: string, salt: string) {
+    this.passphrase = passphrase;
+    this.serverPath = serverPath;
+    this.salt = salt;
     // Start unchecked each time so the passphrase is never shared by accident.
-    this.setIncludePassphrase(false);
+    this.setWithPassphrase(false);
     this.el("backdrop").hidden = false;
     if (!this.open) document.addEventListener("keydown", this.onKeydown);
     this.open = true;
-    this.setMode("show");
+    this.setMode("url");
   }
 
   hide() {
@@ -73,27 +91,22 @@ export class QrCodeElement extends HTMLElement {
 
   private setMode(mode: Mode) {
     this.cancelScan();
-    this.el("show").setAttribute("aria-pressed", String(mode === "show"));
     this.el("url").setAttribute("aria-pressed", String(mode === "url"));
     this.el("scan").setAttribute("aria-pressed", String(mode === "scan"));
-    if (mode === "show") this.renderQr(this.value);
-    else if (mode === "url") this.renderQr(this.shareUrl());
+    if (mode === "url") this.renderQr(this.shareUrl());
     else this.startScan();
   }
 
-  private setIncludePassphrase(on: boolean) {
-    this.includePassphrase = on;
-    this.el("include-passphrase").setAttribute("aria-checked", String(on));
+  private setWithPassphrase(on: boolean) {
+    this.withPassphrase = on;
+    this.el("with-passphrase").setAttribute("aria-checked", String(on));
   }
 
-  /** This page's URL, plus &p=<passphrase> in the fragment when ticked */
+  /** origin/<serverPath>/#s=<salt>, plus &p=<passphrase> when ticked */
   private shareUrl(): string {
-    if (!this.includePassphrase || !this.value) return this.url;
-    const url = new URL(this.url);
-    const fragment = new URLSearchParams(url.hash.slice(1));
-    fragment.set("p", this.value);
-    url.hash = fragment.toString();
-    return url.href;
+    const fragment = new URLSearchParams({ s: this.salt });
+    if (this.withPassphrase && this.passphrase) fragment.set("p", this.passphrase);
+    return `${location.origin}${this.serverPath}/#${fragment}`;
   }
 
   private renderQr(text: string) {
@@ -155,9 +168,11 @@ export class QrCodeElement extends HTMLElement {
       const text = typeof result === "string"
         ? result
         : result?.find((r): r is string => typeof r === "string");
-      if (text === undefined) return;
+      // Codes that aren't share URLs are ignored; keep scanning.
+      const detail = text === undefined ? undefined : parseShareUrl(text);
+      if (!detail) return;
       this.hide();
-      this.dispatchEvent(new CustomEvent<string>("scan", { detail: text }));
+      this.dispatchEvent(new CustomEvent<ScanDetail>("scan", { detail }));
     });
     this.stopScan = () => {
       cancelLoop();
@@ -175,6 +190,31 @@ export class QrCodeElement extends HTMLElement {
   private el(id: string): HTMLElement {
     return this.shadow!.getElementById(id)!;
   }
+}
+
+/**
+ * Reads a share URL, host/<path>/#s=<salt>[&p=<passphrase>]. Undefined when
+ * the text isn't a URL or carries neither salt nor passphrase.
+ */
+function parseShareUrl(text: string): ScanDetail | undefined {
+  if (!URL.canParse(text)) return;
+  const url = new URL(text);
+  const share = new URLSearchParams(url.hash.slice(1));
+  const detail = {
+    serverPath: url.pathname.replace(/\/$/, "") || undefined,
+    salt: share.get("s") || undefined,
+    passphrase: share.get("p") || undefined,
+  };
+  return detail.salt || detail.passphrase ? detail : undefined;
+}
+
+/** Types the "scan" event on this element only, so listeners get ScanDetail */
+export interface QrCodeElement {
+  addEventListener(
+    type: "scan",
+    listener: (e: CustomEvent<ScanDetail>) => void,
+  ): void;
+  addEventListener(...args: Parameters<HTMLElement["addEventListener"]>): void;
 }
 
 function cameraError(e: unknown): string {

@@ -4,6 +4,7 @@ import help from "./help.md?raw";
 
 /** Components **/
 import "./components/qr-code/qr-code.ai";
+import type { ScanDetail } from "./components/qr-code/qr-code.ai";
 import "./components/sandboxed-markdown/sandboxed-markdown.ai";
 
 /** SVG Icons */
@@ -58,17 +59,20 @@ class SecureClipElement extends HTMLElement {
     });
 
     qr.innerHTML = QrCode;
-    qr.addEventListener("click", () => this.shadow!.querySelector("qr-code")!.show(field.value));
+    qr.addEventListener(
+      "click",
+      () =>
+        this.shadow!.querySelector("qr-code")!.show(
+          field.value,
+          this.settings.serverPath,
+          this.settings.salt,
+        ),
+    );
 
     /**
      * Listen for events from qr-code scanning
      */
-    this.shadow!.querySelector("qr-code")!.addEventListener("scan", (e) => {
-      const passphrase = (e as CustomEvent<string>).detail;
-      field.value = passphrase;
-      localStorage.setItem("sc:passphrase", passphrase);
-      this.core.stdin({ command: "set-passphrase", body: passphrase });
-    });
+    this.shadow!.querySelector("qr-code")!.addEventListener("scan", (e) => this.handleScanEvent(e));
   }
 
   initHideShowIcon(field: HTMLInputElement, toggle: HTMLButtonElement) {
@@ -190,6 +194,41 @@ class SecureClipElement extends HTMLElement {
       this.core.stdin({ command: "connect" });
     });
   }
+
+  /**
+   * Handles the scan event from qr-code element, updates passphrase, url path,
+   * and salt. all optional.
+   *
+   * Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+   */
+  handleScanEvent({ detail: { serverPath, salt, passphrase } }: CustomEvent<ScanDetail>) {
+    if (serverPath) localStorage.setItem("sc:server", serverPath);
+    if (salt) localStorage.setItem("sc:salt", salt);
+    if (passphrase) {
+      localStorage.setItem("sc:passphrase", passphrase);
+      (this.shadow!.getElementById("passphrase-field") as HTMLInputElement).value = passphrase;
+    }
+    const next = {
+      serverPath: serverPath || this.settings.serverPath,
+      salt: salt || this.settings.salt,
+      passphrase: passphrase || this.core.state.passphrase,
+    };
+    if (next.serverPath === this.settings.serverPath && next.salt === this.settings.salt) {
+      if (passphrase) this.core.stdin({ command: "set-passphrase", body: passphrase });
+      return;
+    }
+    this.settings = next;
+    const { render } = this.core;
+    this.core.stdin({ command: "disconnect" });
+    this.core = new SecureClip({
+      host: location.host + next.serverPath,
+      ssl: location.protocol === "https:",
+      salt: next.salt,
+      transport: "socket",
+    }, next.passphrase);
+    this.core.render = render;
+    this.core.stdin({ command: "connect" });
+  }
 }
 
 const sheet = new CSSStyleSheet();
@@ -219,6 +258,6 @@ function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: 
   const salt = fromUrl("sc:salt", share.get("s"));
   const p = share.get("p");
   if (p) localStorage.setItem("sc:passphrase", p);
-  history.replaceState(null, "", `${serverPath}/#${new URLSearchParams({ s: salt })}`);
+  history.replaceState(null, "", "/");
   return { serverPath, salt, passphrase: p || localStorage.getItem("sc:passphrase") };
 }
