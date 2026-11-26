@@ -29,7 +29,7 @@ class SecureClipElement extends HTMLElement {
       salt: this.settings.salt,
       transport: "socket",
     },
-    this.settings.passphrase ?? Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false),
+    this.settings.passphrase,
   );
   shadow?: ShadowRoot;
   /** Local presentation state; never sent to core */
@@ -240,7 +240,7 @@ navigator.serviceWorker?.register("/sw.js");
 /**
  * Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  */
-function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: string | null } {
+function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: string } {
   const share = new URLSearchParams(location.hash.slice(1));
   const fromUrl = (key: string, value: string | null) => {
     value ||= localStorage.getItem(key) ?? "";
@@ -249,8 +249,9 @@ function initSettingsFromUrl(): { serverPath: string; salt: string; passphrase: 
   };
   const serverPath = fromUrl("sc:server", location.pathname.replace(/\/$/, ""));
   const salt = fromUrl("sc:salt", share.get("s"));
-  const p = share.get("p");
-  if (p) localStorage.setItem("sc:passphrase", p);
+  const passphrase = share.get("p") || localStorage.getItem("sc:passphrase") ||
+    Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false);
+  localStorage.setItem("sc:passphrase", passphrase);
   history.replaceState(null, "", "/");
-  return { serverPath, salt, passphrase: p || localStorage.getItem("sc:passphrase") };
+  return { serverPath, salt, passphrase };
 }
