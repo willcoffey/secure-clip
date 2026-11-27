@@ -1,10 +1,10 @@
-import { SecureClip } from "./core.ts";
+import { Crypt, SecureClip } from "./core.ts";
 import { assertSeclipOptions, parseSeclipOptions } from "./lib/util.ai.ts";
 import encodeQR from "qr";
 
 function showHelp() {
   console.log(`Secure clipboard CLI.
-Usage: seclip [OPTIONS] get|set|subscribe|qr|url
+Usage: seclip [OPTIONS] get|set|subscribe|qr|url|dice
 
 COMMANDS
   get                     Loads value from board
@@ -12,6 +12,7 @@ COMMANDS
   subscribe               Connects with a socket and streams out board updates
   qr                      Prints a scannable qr code in the terminal
   url                     Logs the url for the board (same value as qr)
+  dice                    Generate a random passphrase
 
 OPTIONS
   -h, --help              Print help
@@ -26,7 +27,8 @@ Examples:
   echo "hello" | seclip set
   seclip subscribe
   seclip -n 1 subscribe
-  seclip -d example.com/SERVER_PATH#s=SALT --passphrase swordfish get`);
+  seclip -d example.com/SERVER_PATH#s=SALT --passphrase swordfish get
+  export SECLIP_PASSPHRASE=\$(seclip dice)`);
 }
 
 async function main() {
@@ -38,6 +40,9 @@ async function main() {
       n: true,
     });
     if (opts.flags.h || opts.flags.help) return showHelp();
+    if (opts.operands[0] === "dice") {
+      return console.log(Crypt.uint8ArrayToBase64(Crypt.randomBytes(16), false));
+    }
     const fullOptions = parseSeclipOptions(
       opts,
       process.env,
