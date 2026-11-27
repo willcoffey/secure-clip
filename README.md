@@ -9,7 +9,19 @@
 ---
 
 # Summary
- - Not vetted, see SECURITY.md
+`seclip` is a simple, self-hostable, end-to-end encrypted clipboard utility
+designed to make it easy to sync text between contexts without any accounts. It
+arose from the annoyance of clipboard management across SSH hosts but has many
+more use cases. Copying text to phone from terminal, having claude send reports
+for viewing on phone or browser. Sharing text over sandbox boundaries. etc etc.
+
+Features
+ - End-to-End encrypted
+ - Markdown Rendering
+ - Phone / Web Browser and terminal interface
+ - `.vimrc` functions and `SKILL.md`
+ - WebSocket subscriptions to boards
+ - QR Code sharing of secret keys
 
 # Quick Test
 ```
