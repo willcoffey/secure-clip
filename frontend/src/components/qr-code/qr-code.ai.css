@@ -1,75 +1,102 @@
+/* The <dialog> is the full-screen backdrop; strip the UA dialog box styles */
 #backdrop {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
   background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
 }
 
-#backdrop[hidden] {
+#backdrop:not([open]) {
   display: none;
 }
 
+#backdrop::backdrop {
+  background: transparent;
+}
+
+/* The panel owns the width so the action row can't push it past the
+   viewport. Capped by height too (room for up to ~2 rows of actions), so
+   the whole panel always fits on screen. */
 #panel {
   display: flex;
   flex-direction: column;
+  width: min(92vw, calc(100dvh - 150px));
 }
 
+#popover {
+  background: #e8e4c8;
+  border-radius: 8px 8px 0 0;
+  padding: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 1px gaps over the border colour draw the dividers, whether Scan sits
+   beside URL or wraps onto its own row on narrow screens. */
 #actions {
   display: flex;
-  background: #d6d1b0;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: #b8b28e;
   border-top: 1px solid #b8b28e;
   border-radius: 0 0 8px 8px;
   overflow: hidden;
 }
 
 #actions button {
-  flex: 1;
+  min-width: 0;
+  /* Thumb-sized tap targets */
+  min-height: 44px;
   padding: 10px;
-  background: none;
+  background: #d6d1b0;
   color: #6b6650;
   border: none;
-  font-family: inherit;
+  border-radius: 0;
+  font: inherit;
   cursor: pointer;
 }
 
-#actions button + button {
-  border-left: 1px solid #b8b28e;
+#actions button:focus-visible {
+  outline: 2px solid #272822;
+  outline-offset: -3px;
 }
 
-#actions button[aria-pressed="true"] {
+#url-group,
+#scan {
+  flex: 1 1 auto;
+}
+
+#url-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* The whole URL group reads as the pressed mode, options included */
+#url-group:has(> #url[aria-pressed="true"]) button,
+#scan[aria-pressed="true"] {
   background: #c9c39f;
   color: #272822;
 }
 
-#url {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
 /* Second row: cells "with passphrase" | "Copy" | "Paste" */
-#url .options {
+#url-group .options {
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-self: stretch;
-  /* Bleed over the button's 10px padding so the cell borders reach its edges */
-  margin: 4px -10px -10px;
-  border-top: 1px solid #b8b28e;
-}
-
-#url .options > * {
-  justify-content: center;
-  padding: 6px 10px;
-}
-
-#url .options > * + * {
-  border-left: 1px solid #b8b28e;
-  border-radius: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 1px;
 }
 
 #with-passphrase,
@@ -77,17 +104,23 @@
 #paste {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 6px 8px;
 }
 
-#with-passphrase:hover,
-#copy:hover,
-#paste:hover {
+/* The only label allowed to wrap, so Copy/Paste stay visible on very
+   narrow screens */
+#with-passphrase {
+  white-space: normal;
+  text-align: left;
+}
+
+/* :has(> #url) only lifts specificity above the pressed-group rule */
+#url-group:has(> #url) .options button:hover {
   color: #272822;
-  background: rgba(0, 0, 0, 0.12);
+  background: #bfb994;
 }
 
 #with-passphrase:hover {
@@ -115,15 +148,16 @@
 }
 
 /* Red flags the riskier choice: the QR then carries the passphrase */
-#with-passphrase[aria-checked="true"] {
+#url-group:has(> #url) #with-passphrase[aria-checked="true"] {
   color: #8f1a10;
 }
 
-#with-passphrase[aria-checked="true"]:hover {
+#url-group:has(> #url) #with-passphrase[aria-checked="true"]:hover {
   color: #6e130b;
 }
 
 #with-passphrase .box {
+  flex: none;
   width: 14px;
   height: 14px;
   border: 1px solid currentColor;
@@ -140,15 +174,37 @@
   content: "✓";
 }
 
-#popover {
-  background: #e8e4c8;
-  border-radius: 8px 8px 0 0;
-  padding: 16px;
-  width: min(80vw, 80vh);
-  height: min(80vw, 80vh);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Short landscape screens (phones on their side): QR on the left, actions
+   stacked on the right, so the QR can use the full height. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #panel {
+    flex-direction: row;
+    width: auto;
+  }
+
+  #popover {
+    width: min(90dvh, calc(96vw - 300px));
+    border-radius: 8px 0 0 8px;
+  }
+
+  #actions {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    width: 300px;
+    border-top: none;
+    border-left: 1px solid #b8b28e;
+    border-radius: 0 8px 8px 0;
+  }
+
+  #url-group,
+  #scan {
+    flex: 1 1 0;
+  }
+
+  #url,
+  #url-group .options {
+    flex: 1 1 0;
+  }
 }
 
 #popover svg {

@@ -28,7 +28,6 @@ export class QrCodeElement extends HTMLElement {
   private passphrase = "";
   private serverPath = "";
   private salt = "";
-  private open = false;
   /** URL mode adds the passphrase to the QR'd URL */
   private withPassphrase = false;
   /** Stops the active camera + frame loop, if any */
@@ -36,22 +35,24 @@ export class QrCodeElement extends HTMLElement {
   /** Incremented on every mode change, so a slow camera start can tell it is stale */
   private scanToken = 0;
 
-  private onKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") this.hide();
-  };
-
   connectedCallback() {
     this.shadow = this.attachShadow({ mode: "open" });
     this.shadow.adoptedStyleSheets = [sheet];
     this.shadow.innerHTML = html;
 
-    this.el("backdrop").addEventListener("click", () => this.hide());
+    const dialog = this.dialog();
+    dialog.addEventListener("click", () => this.hide());
+    // Escape closes the modal dialog natively; "close" covers that path so
+    // the camera is still stopped.
+    dialog.addEventListener("close", () => this.hide());
     // Clicks inside the panel shouldn't reach the backdrop's dismiss handler.
     this.el("panel").addEventListener("click", (e) => e.stopPropagation());
     this.el("url").addEventListener("click", () => this.setMode("url"));
     this.el("scan").addEventListener("click", () => this.setMode("scan"));
-    // The checkbox, Copy and Paste sit inside the URL button, so their clicks
-    // then bubble to it, which (re)renders URL mode.
+    // The checkbox, Copy and Paste belong to URL mode: after their own
+    // handlers, their clicks bubble here and (re)render URL mode.
+    this.el("url-group").querySelector(".options")!
+      .addEventListener("click", () => this.setMode("url"));
     this.el("with-passphrase").addEventListener("click", () => {
       this.setWithPassphrase(!this.withPassphrase);
     });
@@ -96,18 +97,21 @@ export class QrCodeElement extends HTMLElement {
     this.salt = salt;
     // Start unchecked each time so the passphrase is never shared by accident.
     this.setWithPassphrase(false);
-    this.el("backdrop").hidden = false;
-    if (!this.open) document.addEventListener("keydown", this.onKeydown);
-    this.open = true;
+    // Modal: focus moves in and stays in; the page behind is inert.
+    if (!this.dialog().open) this.dialog().showModal();
     this.setMode("url");
   }
 
   hide() {
     this.cancelScan();
     if (!this.shadow) return;
-    this.el("backdrop").hidden = true;
-    document.removeEventListener("keydown", this.onKeydown);
-    this.open = false;
+    // close() returns focus to whatever opened the dialog. It also fires
+    // "close", which calls back here; the guard makes that a no-op.
+    if (this.dialog().open) this.dialog().close();
+  }
+
+  private dialog(): HTMLDialogElement {
+    return this.el("backdrop") as HTMLDialogElement;
   }
 
   private setMode(mode: Mode) {

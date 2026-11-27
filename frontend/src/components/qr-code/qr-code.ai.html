@@ -1,24 +1,26 @@
-<div id="backdrop" hidden>
+<!-- A modal <dialog>: showModal() traps focus and makes the page behind inert;
+     Escape fires "cancel". The dialog itself is the full-screen backdrop. -->
+<dialog id="backdrop" aria-label="Share QR code">
   <div id="panel">
     <div id="popover"></div>
     <div id="actions">
-      <button id="url" type="button" aria-pressed="true">
-        <span>URL</span>
-        <!-- Spans, not <input>/<button>: some browsers don't deliver clicks
-             to controls nested in a <button> -->
-        <span class="options">
-          <span id="with-passphrase" role="checkbox" aria-checked="false">
+      <!-- URL mode and its options; the group highlights while URL is active -->
+      <div id="url-group">
+        <button id="url" type="button" aria-pressed="true">URL</button>
+        <div class="options">
+          <button id="with-passphrase" type="button" role="checkbox"
+                  aria-checked="false">
             <span class="box"></span>with passphrase
-          </span>
-          <span id="copy" role="button" title="Copy URL">
+          </button>
+          <button id="copy" type="button" title="Copy URL">
             <span class="icon"></span><span class="label">Copy</span>
-          </span>
-          <span id="paste" role="button" title="Paste a share URL">
+          </button>
+          <button id="paste" type="button" title="Paste a share URL">
             <span class="icon"></span><span class="label">Paste</span>
-          </span>
-        </span>
-      </button>
+          </button>
+        </div>
+      </div>
       <button id="scan" type="button" aria-pressed="false">Scan</button>
     </div>
   </div>
-</div>
+</dialog>
